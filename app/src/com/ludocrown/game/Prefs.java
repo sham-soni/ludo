@@ -38,6 +38,9 @@ final class Prefs {
         }
     }
 
+    static boolean sound() { return sp.getBoolean("sound", true); }
+    static void setSound(boolean on) { sp.edit().putBoolean("sound", on).apply(); }
+
     static int coins() { return sp.getInt("coins", 5850); }
     static void addCoins(int n) { sp.edit().putInt("coins", Math.max(0, coins() + n)).apply(); }
     static int gems() { return sp.getInt("gems", 150); }

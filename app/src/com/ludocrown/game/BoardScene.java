@@ -17,7 +17,7 @@ class BoardScene extends Scene {
     static final float BX = 18, BY = 570, BS = 862, CS = BS / 15f;
 
     private static final int S_ROLL = 0, S_ROLLING = 1, S_MOVE = 2, S_MOVING = 3, S_PASS = 4, S_OVER = 5;
-    private static final long ROLL_MS = 650, STEP_MS = 125, BACK_MS = 420;
+    private static final long ROLL_MS = 650, STEP_MS = 125, BACK_MS = 900;
 
     final GameConfig cfg;
     final LudoGame game;
@@ -38,7 +38,9 @@ class BoardScene extends Scene {
     private long mvAt;
 
     // captured tokens flying back
-    private final List<float[]> flying = new ArrayList<>(); // {player, token, fromX, fromY, startTime}
+    private final List<float[]> flying = new ArrayList<>(); // {player, token, fromProgress, startTime}
+    private long landAt;
+    private int stepsPlayed;
 
     private boolean paused;
     private final RectF bResume = new RectF(250, 820, 650, 920);
@@ -136,6 +138,12 @@ class BoardScene extends Scene {
                 }
                 break;
             case S_MOVING:
+                // a "tok" as the token lands on each square
+                int landed = (int) Math.min(steps.size(), (now - mvAt) / STEP_MS);
+                if (landed > stepsPlayed) {
+                    stepsPlayed = landed;
+                    Sfx.play(Sfx.STEP, 0.9f + 0.03f * (landed % 5));
+                }
                 if (now - mvAt >= steps.size() * STEP_MS) finishMove();
                 break;
             case S_PASS:
@@ -163,12 +171,15 @@ class BoardScene extends Scene {
 
     private void startRoll() {
         pendingRoll = game.rollFor(turn, sixes);
+        Sfx.play(Sfx.ROLL);
         setState(S_ROLLING);
     }
 
     private void finishRoll() {
         dice = pendingRoll;
         lastDice[turn] = dice;
+        landAt = System.currentTimeMillis();
+        if (dice == 6) Sfx.play(Sfx.SIX);
         if (dice == 6) sixes++;
         if (sixes >= 3) {
             view.toast("Three sixes in a row - turn lost");
@@ -199,6 +210,7 @@ class BoardScene extends Scene {
         if (mvFrom == LudoGame.YARD) steps.add(0);
         else for (int s = mvFrom + 1; s <= to; s++) steps.add(s);
         mvAt = System.currentTimeMillis();
+        stepsPlayed = 0;
         setState(S_MOVING);
     }
 
@@ -208,15 +220,21 @@ class BoardScene extends Scene {
         List<int[]> caps = game.captures(turn, to);
         game.pos[turn][mvToken] = to;
         for (int[] cap : caps) {
-            float[] from = spot(cap[0], cap[1], game.pos[cap[0]][cap[1]]);
+            flying.add(new float[]{cap[0], cap[1], game.pos[cap[0]][cap[1]], now});
             game.pos[cap[0]][cap[1]] = LudoGame.YARD;
-            flying.add(new float[]{cap[0], cap[1], from[0], from[1], now});
+        }
+        if (!caps.isEmpty()) {
+            Sfx.play(Sfx.CAPTURE);
+            Sfx.vibrate(150);
+        } else if (to == LudoGame.HOME) {
+            Sfx.play(Sfx.HOME);
         }
         mvToken = -1;
         if (!caps.isEmpty()) view.toast(cfg.names[turn] + " captured " + cfg.names[caps.get(0)[0]] + "!");
         if (game.won(turn)) {
             game.finishOrder.add(turn);
             if (cfg.mode == LudoGame.TEAM) game.finishOrder.add((turn + 2) % 4);
+            Sfx.play(Sfx.WIN);
             setState(S_OVER);
             return;
         }
@@ -238,6 +256,7 @@ class BoardScene extends Scene {
                 break;
             }
         }
+        if (!cfg.bot[turn]) Sfx.play(Sfx.TURN);
         setState(S_ROLL);
     }
 
@@ -417,16 +436,23 @@ class BoardScene extends Scene {
             Art.token(c, cfg.tokenStyle, d.x, d.y + CS * 0.12f + bob, size, d.p);
         }
         // flying (captured) tokens
+        // captured tokens run backwards along the track to their yard, then hop in
         for (int i = flying.size() - 1; i >= 0; i--) {
             float[] f = flying.get(i);
-            float k = (now - (long) f[4]) / (float) BACK_MS;
-            int p = (int) f[0], t = (int) f[1];
-            if (k >= 1) {
+            int p = (int) f[0], t = (int) f[1], from = (int) f[2];
+            int n = from + 2; // squares back to the start, plus the hop into the yard
+            float stepMs = Math.min(40f, BACK_MS / (float) n);
+            float k = (now - (long) f[3]) / stepMs;
+            if (k >= n - 1) {
                 flying.remove(i);
-                k = 1;
+                continue;
             }
-            float[] to = spot(p, t, LudoGame.YARD);
-            float x = f[2] + (to[0] - f[2]) * k, y = f[3] + (to[1] - f[3]) * k - (float) Math.sin(k * Math.PI) * 120;
+            int idx = (int) k;
+            float fr = k - idx;
+            int a = from - idx, b = from - idx - 1; // b == -1 is the yard
+            float[] pa = spot(p, t, a), pb = spot(p, t, b < 0 ? LudoGame.YARD : b);
+            float hop = b < 0 ? 140 : 8;
+            float x = pa[0] + (pb[0] - pa[0]) * fr, y = pa[1] + (pb[1] - pa[1]) * fr - (float) Math.sin(fr * Math.PI) * hop;
             Art.token(c, cfg.tokenStyle, x, y + CS * 0.12f, CS * 1.08f, p);
         }
         // moving token
@@ -463,9 +489,18 @@ class BoardScene extends Scene {
         if (mine) {
             long now = System.currentTimeMillis();
             if (state == S_ROLLING) {
-                int face = 1 + (int) ((now / 70) % 6);
-                float rot = (float) Math.sin(now / 40.0) * 25;
-                Art.dice(c, d.centerX(), d.centerY(), 92, face, rot, 0xFFDADADA);
+                // tumbling dice: spins and bounces, faces change slower as it settles
+                float k = Math.min(1f, (now - stateAt) / (float) ROLL_MS);
+                int tick = (int) (Math.pow(k, 0.6) * 14);
+                int face = 1 + (int) (((tick * 7919L) ^ (turn * 31L)) % 6);
+                float rot = (1 - k) * (1 - k) * 540;
+                float hop = (float) Math.abs(Math.sin(k * Math.PI * 2.5)) * 38 * (1 - k);
+                float sc = 1 + 0.12f * (float) Math.sin(k * Math.PI);
+                Art.reset();
+                Art.P.setColor(0x44000000);
+                Art.R.set(d.centerX() - 40, d.centerY() + 40, d.centerX() + 40, d.centerY() + 54);
+                c.drawOval(Art.R, Art.P);
+                Art.dice(c, d.centerX(), d.centerY() - hop, 92 * sc, face, rot, 0xFFDADADA);
             } else if (state == S_ROLL) {
                 float s = 92 + (float) Math.sin(now / 150.0) * 5;
                 Art.dice(c, d.centerX(), d.centerY(), s, dice, 0, 0xFFDADADA);
@@ -475,7 +510,10 @@ class BoardScene extends Scene {
                 float ax = leftSide ? b.right + 45 + bob : b.left - 45 - bob;
                 arrowShape(c, ax, b.centerY(), leftSide);
             } else {
-                Art.dice(c, d.centerX(), d.centerY(), 92, dice, 0, 0xFFDADADA);
+                // small squash as the dice lands
+                float t = Math.min(1f, (now - landAt) / 180f);
+                float sc = 1 + 0.14f * (1 - t) * (float) Math.cos(t * Math.PI * 1.5);
+                Art.dice(c, d.centerX(), d.centerY(), 92 * sc, dice, 0, 0xFFDADADA);
             }
         } else if (lastDice[p] > 0 && state != S_OVER) {
             // faded last roll for other players

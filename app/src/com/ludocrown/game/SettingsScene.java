@@ -66,7 +66,36 @@ class SettingsScene extends Scene {
         float left = 450 - (tw + 56) / 2;
         lockIcon(c, left + 20, 1612, locked);
         Art.textFit(c, status, left + 56 + tw / 2, 1622, 32, 600, locked ? 0xFFFFD31A : 0xFFFFFFFF, 0, 0, Art.COND);
+        speaker(c, 770, 420, Prefs.sound());
         Art.backButton(c, 87, 1918, down(87, 1918, 55));
+    }
+
+    /** Sound on/off button in the panel's corner. */
+    private void speaker(Canvas c, float x, float y, boolean on) {
+        Art.circle(c, x, y, 36, 0xFFFFC21A);
+        Art.circle(c, x, y, 30, 0xFF1C4FB0);
+        android.graphics.Path p = new android.graphics.Path();
+        p.moveTo(x - 17, y - 8);
+        p.lineTo(x - 7, y - 8);
+        p.lineTo(x + 5, y - 19);
+        p.lineTo(x + 5, y + 19);
+        p.lineTo(x - 7, y + 8);
+        p.lineTo(x - 17, y + 8);
+        p.close();
+        Art.reset();
+        Art.P.setColor(0xFFFFFFFF);
+        c.drawPath(p, Art.P);
+        Art.P.setStyle(android.graphics.Paint.Style.STROKE);
+        Art.P.setStrokeWidth(4);
+        Art.P.setStrokeCap(android.graphics.Paint.Cap.ROUND);
+        if (on) {
+            Art.R.set(x - 6, y - 12, x + 18, y + 12);
+            c.drawArc(Art.R, -50, 100, false, Art.P);
+        } else {
+            Art.P.setColor(0xFFFF5A5A);
+            c.drawLine(x + 10, y - 9, x + 22, y + 9, Art.P);
+            c.drawLine(x + 22, y - 9, x + 10, y + 9, Art.P);
+        }
     }
 
     private void lockIcon(Canvas c, float x, float y, boolean closed) {
@@ -126,6 +155,11 @@ class SettingsScene extends Scene {
     void onTap(float x, float y) {
         if (hit(87, 1918, 60, x, y)) {
             onBack();
+            return;
+        }
+        if (hit(770, 420, 50, x, y)) {
+            Prefs.setSound(!Prefs.sound());
+            view.toast(Prefs.sound() ? "Sound on" : "Sound off");
             return;
         }
         if (hit(bPin, x, y)) {

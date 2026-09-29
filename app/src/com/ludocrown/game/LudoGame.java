@@ -253,8 +253,48 @@ final class LudoGame {
         return mode == TEAM && active[m] && nearWin(m);
     }
 
+    /** Own turns in a row each player has spent with no token on the board. */
+    private final int[] stuck = new int[4];
+
+    private boolean noneOnBoard(int p) {
+        for (int t = 0; t < 4; t++) if (pos[p][t] >= 0 && pos[p][t] < HOME) return false;
+        return true;
+    }
+
     int rollFor(int p, int sixes) {
-        if (favored < 0) return 1 + rnd.nextInt(6);
+        double[] w = weights(p, sixes);
+        // Drought softener (all players, fair mode too): the longer a player has had no token out,
+        // the likelier a six becomes, so nobody sits in the yard for ages.
+        boolean waiting = noneOnBoard(p);
+        if (waiting && w[6] > 0) w[6] *= 1 + 0.6 * stuck[p];
+        int r = sample(p, w);
+        stuck[p] = waiting && r != 6 ? stuck[p] + 1 : 0;
+        return r;
+    }
+
+    private int sample(int p, double[] w) {
+        double sum = 0;
+        for (int r = 1; r <= 6; r++) sum += w[r];
+        if (sum <= 0) {
+            // every roll would win for this player: give one with no legal move
+            for (int r = 1; r <= 6; r++) if (movable(p, r).isEmpty()) return r;
+            return 1 + rnd.nextInt(6);
+        }
+        double x = rnd.nextDouble() * sum;
+        for (int r = 1; r <= 6; r++) {
+            x -= w[r];
+            if (x <= 0 && w[r] > 0) return r;
+        }
+        for (int r = 6; r >= 1; r--) if (w[r] > 0) return r;
+        return 1;
+    }
+
+    private double[] weights(int p, int sixes) {
+        double[] w = new double[7];
+        if (favored < 0) {
+            for (int r = 1; r <= 6; r++) w[r] = 1;
+            return w;
+        }
         // how good each roll would be for this player (best move it allows)
         double[] q = new double[7];
         for (int r = 1; r <= 6; r++) {
@@ -273,7 +313,6 @@ final class LudoGame {
         double pf = sideProgress(favored);
         double opp = bestOpponentProgress();
         double late = Math.max(pf, opp);
-        double[] w = new double[7];
         if (favoredSide(p)) {
             double behind = opp - pf;
             double want = steer * (Math.max(0, behind - slack * 0.5) * 7 + late * late * 0.7);
@@ -305,20 +344,7 @@ final class LudoGame {
                 }
             }
         }
-        double sum = 0;
-        for (int r = 1; r <= 6; r++) sum += w[r];
-        if (sum <= 0) {
-            // every roll would win for this player: give one with no legal move
-            for (int r = 1; r <= 6; r++) if (movable(p, r).isEmpty()) return r;
-            return 1 + rnd.nextInt(6);
-        }
-        double x = rnd.nextDouble() * sum;
-        for (int r = 1; r <= 6; r++) {
-            x -= w[r];
-            if (x <= 0 && w[r] > 0) return r;
-        }
-        for (int r = 6; r >= 1; r--) if (w[r] > 0) return r;
-        return 1;
+        return w;
     }
 
     /** Whether the player can legally be forced to move the given token given the rolled value. */

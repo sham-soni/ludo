@@ -141,7 +141,10 @@ public class GameView extends View {
             case MotionEvent.ACTION_UP:
                 boolean was = pressing;
                 pressing = false;
-                if (was) scene.onTap(downX, downY);
+                if (was) {
+                    if (!(scene instanceof BoardScene)) Sfx.play(Sfx.CLICK);
+                    scene.onTap(downX, downY);
+                }
                 return true;
             case MotionEvent.ACTION_CANCEL:
                 pressing = false;

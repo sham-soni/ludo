@@ -26,6 +26,7 @@ public class MainActivity extends Activity {
         }
         Prefs.init(this);
         Art.init(this);
+        Sfx.init(this);
         view = new GameView(this);
         setContentView(view);
         hideBars();
