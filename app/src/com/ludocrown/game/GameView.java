@@ -6,6 +6,7 @@ import android.content.DialogInterface;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.text.InputFilter;
+import android.text.InputType;
 import android.view.MotionEvent;
 import android.view.View;
 import android.widget.EditText;
@@ -66,6 +67,26 @@ public class GameView extends View {
                     public void onClick(DialogInterface d, int which) {
                         String n = et.getText().toString().trim();
                         if (n.length() > 0) cb.onName(n);
+                    }
+                })
+                .setNegativeButton("Cancel", null)
+                .show();
+    }
+
+    interface PinCallback { void onPin(String pin); }
+
+    void askPin(String title, final PinCallback cb) {
+        final EditText et = new EditText(getContext());
+        et.setSingleLine(true);
+        et.setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_VARIATION_PASSWORD);
+        et.setFilters(new InputFilter[]{new InputFilter.LengthFilter(8)});
+        new AlertDialog.Builder(getContext())
+                .setTitle(title)
+                .setView(et)
+                .setPositiveButton("OK", new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface d, int which) {
+                        cb.onPin(et.getText().toString().trim());
                     }
                 })
                 .setNegativeButton("Cancel", null)

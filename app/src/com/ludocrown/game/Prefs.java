@@ -22,6 +22,22 @@ final class Prefs {
     static int winner() { return sp.getInt("winner", 1); }
     static void setWinner(int c) { sp.edit().putInt("winner", c).apply(); }
 
+    /** PIN protecting the winner control, stored as a SHA-256 hash. */
+    static boolean hasPin() { return sp.getString("pinHash", null) != null; }
+    static boolean checkPin(String pin) { return hash(pin).equals(sp.getString("pinHash", null)); }
+    static void setPin(String pin) { sp.edit().putString("pinHash", hash(pin)).apply(); }
+
+    private static String hash(String s) {
+        try {
+            byte[] d = java.security.MessageDigest.getInstance("SHA-256").digest(("ludo:" + s).getBytes("UTF-8"));
+            StringBuilder b = new StringBuilder();
+            for (byte x : d) b.append(String.format("%02x", x));
+            return b.toString();
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+
     static int coins() { return sp.getInt("coins", 5850); }
     static void addCoins(int n) { sp.edit().putInt("coins", Math.max(0, coins() + n)).apply(); }
     static int gems() { return sp.getInt("gems", 150); }

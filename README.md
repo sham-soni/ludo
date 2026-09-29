@@ -11,6 +11,8 @@ Tap the **gear** icon on the home screen (next to the avatar) to open **Settings
 - Red, Yellow or Blue always wins
 - No fixed winner (fair dice)
 
+**PIN lock:** tap **Set PIN** on the same screen and choose a 4–8 digit PIN. Winner Control stays visible to everyone, but changing the colour (or the PIN) then needs that PIN. The PIN is stored as a hash. If you forget it, clear the app's data in Android settings to reset it.
+
 Winner control works like this:
 - The chosen colour gets good rolls.
 - No other player can roll a number that finishes the game for them or captures a token of the chosen colour.

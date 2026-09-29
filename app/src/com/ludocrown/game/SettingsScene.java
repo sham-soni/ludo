@@ -1,12 +1,16 @@
 package com.ludocrown.game;
 
 import android.graphics.Canvas;
+import android.graphics.RectF;
 
-/** Settings screen where the player picks which colour always wins. */
+/** Settings screen where the player picks which colour always wins. Changes need the PIN once one is set. */
 class SettingsScene extends Scene {
     private final HomeScene home;
     // display order of options: green first since it is the default
     private static final int[] OPTIONS = {1, 0, 2, 3, Prefs.FAIR};
+    private final RectF bPin = new RectF(250, 1440, 650, 1530);
+    /** PIN entered correctly during this visit to the screen. */
+    private boolean unlocked;
 
     SettingsScene(GameView v, HomeScene home) {
         super(v);
@@ -19,7 +23,7 @@ class SettingsScene extends Scene {
 
     @Override
     void draw(Canvas c) {
-        Art.panel(c, 60, 330, 840, 1560);
+        Art.panel(c, 60, 330, 840, 1670);
         Art.ribbon(c, 450, 330, 400, 86, "SETTINGS");
         Art.titleText(c, "WINNER CONTROL", 450, 470, 50, Art.BLACK);
         Art.textFit(c, "Choose the colour that always wins the game", 450, 530, 34, 700, 0xFFFFFFFF, 0, 0, Art.COND);
@@ -49,10 +53,73 @@ class SettingsScene extends Scene {
                 Art.circle(c, 725, y + 55, 28, 0xFF0A1F5C);
             }
         }
-        Art.textFit(c, "Works in Computer, Pass N Play and Team Up games.", 450, 1370, 30, 720, 0xFFB8C8E8, 0, 0, Art.COND);
-        Art.textFit(c, "In Team Up the chosen colour's team wins.", 450, 1412, 30, 720, 0xFFB8C8E8, 0, 0, Art.COND);
-        Art.textFit(c, "If that colour is not playing, dice are fair.", 450, 1454, 30, 720, 0xFFB8C8E8, 0, 0, Art.COND);
+        Art.textFit(c, "Works in Computer, Pass N Play and Team Up games.", 450, 1350, 28, 720, 0xFFB8C8E8, 0, 0, Art.COND);
+        Art.textFit(c, "In Team Up the chosen colour's team wins.", 450, 1390, 28, 720, 0xFFB8C8E8, 0, 0, Art.COND);
+        boolean locked = Prefs.hasPin() && !unlocked;
+        Art.pillButton(c, bPin, Prefs.hasPin() ? "Change PIN" : "Set PIN", null, down(bPin));
+        String status = !Prefs.hasPin() ? "Not locked: anyone can change this"
+                : locked ? "Locked: PIN needed to change" : "Unlocked";
+        Art.reset();
+        Art.P.setTypeface(Art.COND);
+        Art.P.setTextSize(32);
+        float tw = Math.min(600, Art.P.measureText(status));
+        float left = 450 - (tw + 56) / 2;
+        lockIcon(c, left + 20, 1612, locked);
+        Art.textFit(c, status, left + 56 + tw / 2, 1622, 32, 600, locked ? 0xFFFFD31A : 0xFFFFFFFF, 0, 0, Art.COND);
         Art.backButton(c, 87, 1918, down(87, 1918, 55));
+    }
+
+    private void lockIcon(Canvas c, float x, float y, boolean closed) {
+        if (closed) {
+            Art.ring(c, x, y - 18, 14, 0xFFFFC21A, 6);
+        } else {
+            Art.ring(c, x + 14, y - 22, 14, 0xFFFFC21A, 6);
+        }
+        Art.rrect(c, x - 20, y - 16, x + 20, y + 16, 5, 0xFFFFC21A);
+        Art.circle(c, x, y - 2, 5, 0xFF6A3A00);
+    }
+
+    /** Runs the action now if unlocked, otherwise after the correct PIN is entered. */
+    private void withPin(final Runnable action) {
+        if (!Prefs.hasPin() || unlocked) {
+            action.run();
+            return;
+        }
+        view.askPin("Enter PIN", new GameView.PinCallback() {
+            @Override
+            public void onPin(String pin) {
+                if (Prefs.checkPin(pin)) {
+                    unlocked = true;
+                    action.run();
+                } else {
+                    view.toast("Wrong PIN");
+                }
+            }
+        });
+    }
+
+    private void choosePin() {
+        view.askPin("New PIN (4-8 digits)", new GameView.PinCallback() {
+            @Override
+            public void onPin(final String pin) {
+                if (pin.length() < 4) {
+                    view.toast("PIN must be at least 4 digits");
+                    return;
+                }
+                view.askPin("Enter the new PIN again", new GameView.PinCallback() {
+                    @Override
+                    public void onPin(String again) {
+                        if (!again.equals(pin)) {
+                            view.toast("PINs did not match");
+                            return;
+                        }
+                        Prefs.setPin(pin);
+                        unlocked = false;
+                        view.toast("PIN saved. Winner control is locked");
+                    }
+                });
+            }
+        });
     }
 
     @Override
@@ -61,12 +128,27 @@ class SettingsScene extends Scene {
             onBack();
             return;
         }
+        if (hit(bPin, x, y)) {
+            withPin(new Runnable() {
+                @Override
+                public void run() {
+                    choosePin();
+                }
+            });
+            return;
+        }
         for (int i = 0; i < OPTIONS.length; i++) {
             float ry = rowY(i);
             if (x > 110 && x < 790 && y > ry && y < ry + 110) {
-                Prefs.setWinner(OPTIONS[i]);
-                view.toast(OPTIONS[i] == Prefs.FAIR ? "Fair dice for everyone"
-                        : Art.NAME[OPTIONS[i]] + " will win every game");
+                final int opt = OPTIONS[i];
+                if (opt == Prefs.winner()) return;
+                withPin(new Runnable() {
+                    @Override
+                    public void run() {
+                        Prefs.setWinner(opt);
+                        view.toast(opt == Prefs.FAIR ? "Fair dice for everyone" : Art.NAME[opt] + " will win every game");
+                    }
+                });
                 return;
             }
         }
