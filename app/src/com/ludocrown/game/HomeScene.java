@@ -127,12 +127,12 @@ class HomeScene extends Scene {
         Icons.snake(c, 730, 1453, 125);
         Art.crown(c, 450, 1395, 80);
         Art.rrect(c, 330, 1415, 570, 1500, 30, 0x33000000);
-        Art.titleText(c, "TOURNAMENT", 450, 1480, 62, Art.COND);
+        Art.titleText(c, "TOURNAMENT", 450, 1482, 60, Art.LUCKY);
 
         // season claim
         Art.rrectGrad(c, 330, 1560, 620, 1650, 12, 0xFFFFD84A, 0xFFE08A00);
         Art.rrectStroke(c, 330, 1560, 620, 1650, 12, 0xFFFFF2A0, 4);
-        Art.titleText(c, "CLAIM", 500, 1630, 70, Art.BLACK);
+        Art.titleText(c, "CLAIM", 500, 1632, 68, Art.LUCKY);
         shield(c, 338, 1600, 110);
 
         // free coins (left bottom)
@@ -425,12 +425,13 @@ class HomeScene extends Scene {
         Icons.phone(c, 560, 540, 50, 85, 15);
         Art.check(c, 562, 540, 30, 0xFF1ED81E, 6);
         // panel
+        Art.rrect(c, 27, 694, 873, 1330, 48, 0xFF2A6AE8);
         Art.rrectGrad(c, 35, 700, 865, 1320, 40, 0xFF5AA8FF, 0xFF1E5CD0);
         Art.rrectGrad(c, 125, 700, 775, 800, 30, 0xFF3F8BF0, 0xFF1E5CD0);
         Art.textC(c, "Notification", 450, 785, 70, 0xFFFFFFFF, 0xFF0A1F5C, 4, Art.COND);
         Art.rrect(c, 60, 820, 840, 1290, 22, 0xFFF7E8D8);
-        Art.textFit(c, "Get reminders for daily", 450, 980, 66, 740, 0xFF000000, 0, 0, Art.COND);
-        Art.textFit(c, "bonus and rewards?", 450, 1072, 66, 740, 0xFF000000, 0, 0, Art.COND);
+        Art.textFit(c, "Get reminders for daily", 450, 985, 76, 760, 0xFF000000, 0, 0, Art.COND);
+        Art.textFit(c, "bonus and rewards?", 450, 1080, 76, 760, 0xFF000000, 0, 0, Art.COND);
         Art.star(c, 110, 1215, 22, 0xFFFFB080, 0, 0);
         Art.star(c, 790, 1205, 24, 0xFFFFB080, 0, 0);
         Art.greenButton(c, bYes, "YES", down(bYes));

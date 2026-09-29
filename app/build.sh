@@ -14,7 +14,7 @@ java -Djava.awt.headless=true -cp "$OUT/tools" IconGen res
 # resources
 aapt2 compile --dir res -o "$OUT/res.zip"
 aapt2 link -o "$OUT/base.apk" -I "$SDK" --manifest AndroidManifest.xml \
-  --min-sdk-version 21 --target-sdk-version 34 --java "$OUT/gen" "$OUT/res.zip"
+  --min-sdk-version 21 --target-sdk-version 34 --java "$OUT/gen" -A assets "$OUT/res.zip"
 
 # code
 javac -source 8 -target 8 -nowarn -Xlint:-options -bootclasspath "$SDK" -d "$OUT/classes" \

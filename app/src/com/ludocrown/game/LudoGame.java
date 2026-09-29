@@ -8,9 +8,9 @@ import java.util.Random;
  * Ludo rules. Token progress: -1 = in yard, 0..50 = main track (relative to the colour's start),
  * 51..55 = home column, 56 = reached home.
  *
- * Dice rolls go through {@link #rollFor(int)}, which applies the "winner control" setting: the chosen
- * colour (and its partner in Team Up) gets favourable rolls, and every other player only receives rolls
- * that can neither finish the game for them nor capture a token of the chosen colour.
+ * Dice rolls go through {@link #rollFor(int, int)}, which applies the "winner control" setting: rolls stay
+ * close to fair and the game goes back and forth, but the chosen colour (and its partner in Team Up) is
+ * steered to finish first and no other player is ever given the winning roll.
  */
 final class LudoGame {
     static final int CLASSIC = 0, TEAM = 1, QUICK = 2;
@@ -127,13 +127,6 @@ final class LudoGame {
         return w;
     }
 
-    private boolean moveHitsFavored(int p, int t, int roll) {
-        for (int[] cap : captures(p, target(p, t, roll))) {
-            if (favoredSide(cap[0])) return true;
-        }
-        return false;
-    }
-
     /** Heuristic value of a move (used by bots and by the favoured roll picker). */
     int score(int p, int t, int roll) {
         int from = pos[p][t];
@@ -186,66 +179,154 @@ final class LudoGame {
 
     // ------------------------------------------------------------------ dice
 
-    int rollFor(int p, int sixes) {
-        if (favored < 0) return 1 + rnd.nextInt(6);
-        if (favoredSide(p)) return favoredRoll(p, sixes);
-        return restrictedRoll(p);
+    /*
+     * Winner control. Most rolls are close to fair; the dice are only nudged, and the nudge grows as the
+     * game goes on:
+     *  - a player who gets too far ahead of the chosen colour sees slightly weaker rolls,
+     *  - the chosen colour gets slightly better rolls when it falls behind, and more so near the end,
+     *  - a roll that would let another player win is never given.
+     * The strength, how far others may lead and when captures of the chosen colour become rare are all
+     * randomised per game, so no two games play out the same way.
+     */
+    private final double steer = 0.7 + rnd.nextDouble() * 0.7;
+    private final double slack = 0.05 + rnd.nextDouble() * 0.12;
+    private final int captureCut = 16 + rnd.nextInt(20);
+
+    /** Fraction (0..1) of the way to finishing, for a colour. */
+    double tokenProgress(int p) {
+        int s = 0;
+        for (int t = 0; t < 4; t++) {
+            int v = pos[p][t];
+            s += v == YARD ? 0 : v + 1;
+        }
+        if (mode == QUICK) {
+            int best = 0;
+            for (int t = 0; t < 4; t++) best = Math.max(best, pos[p][t] + 1);
+            return best / 57.0;
+        }
+        return s / 228.0;
     }
 
-    private int favoredRoll(int p, int sixes) {
-        int[] val = new int[7];
-        int best = -1;
-        for (int r = 1; r <= 6; r++) {
-            int v = -50;
-            for (int t : movable(p, r)) v = Math.max(v, score(p, t, r));
-            if (r == 6 && sixes >= 2) v = -500; // never lose a turn to three sixes
-            v += rnd.nextInt(30);
-            val[r] = v;
-            if (best < 0 || v > val[best]) best = r;
-        }
-        // mostly the best roll, sometimes a random still-useful one so it looks natural
-        if (rnd.nextInt(100) < 25) {
-            int r = 1 + rnd.nextInt(6);
-            if (val[r] > 0 && !(r == 6 && sixes >= 2)) return r;
-        }
+    /** Progress of a side (a colour, or a team in Team Up). */
+    double sideProgress(int p) {
+        int m = (p + 2) % 4;
+        if (mode == TEAM && active[m]) return (tokenProgress(p) + tokenProgress(m)) / 2;
+        return tokenProgress(p);
+    }
+
+    int homeCount(int p) {
+        int n = 0;
+        for (int t = 0; t < 4; t++) if (pos[p][t] == HOME) n++;
+        return n;
+    }
+
+    private double bestOpponentProgress() {
+        double best = 0;
+        for (int q = 0; q < 4; q++) if (active[q] && !favoredSide(q)) best = Math.max(best, sideProgress(q));
         return best;
     }
 
-    private int restrictedRoll(int p) {
-        List<Integer> ok = new ArrayList<>();
-        List<Integer> noMove = new ArrayList<>();
+    /** Some non-favoured player is one exact roll away from winning. */
+    boolean opponentNearWin() {
+        for (int q = 0; q < 4; q++) if (active[q] && !favoredSide(q) && nearWin(q)) return true;
+        return false;
+    }
+
+    private boolean nearWin(int p) {
+        for (int r = 1; r <= 6; r++) for (int t : movable(p, r)) if (moveWins(p, t, r)) return true;
+        return false;
+    }
+
+    /** After moving t by roll, could p win with a single further roll? */
+    private boolean wouldBeNearWin(int p, int t, int roll) {
+        int old = pos[p][t];
+        pos[p][t] = target(p, t, roll);
+        boolean near = !won(p) && nearWin(p);
+        pos[p][t] = old;
+        return near;
+    }
+
+    /** The chosen side is itself close to finishing (last stretch). */
+    private boolean favoredNearWin() {
+        if (nearWin(favored)) return true;
+        int m = (favored + 2) % 4;
+        return mode == TEAM && active[m] && nearWin(m);
+    }
+
+    int rollFor(int p, int sixes) {
+        if (favored < 0) return 1 + rnd.nextInt(6);
+        // how good each roll would be for this player (best move it allows)
+        double[] q = new double[7];
         for (int r = 1; r <= 6; r++) {
-            boolean bad = false;
-            List<Integer> mv = movable(p, r);
-            if (mv.isEmpty()) noMove.add(r);
-            for (int t : mv) {
-                if (moveWins(p, t, r) || moveHitsFavored(p, t, r)) {
-                    bad = true;
-                    break;
+            q[r] = -200;
+            for (int t : movable(p, r)) q[r] = Math.max(q[r], score(p, t, r));
+        }
+        double[] rank = new double[7];
+        for (int r = 1; r <= 6; r++) {
+            double below = 0;
+            for (int o = 1; o <= 6; o++) {
+                if (q[o] < q[r]) below += 1;
+                else if (q[o] == q[r] && o != r) below += 0.5;
+            }
+            rank[r] = below / 5.0;
+        }
+        double pf = sideProgress(favored);
+        double opp = bestOpponentProgress();
+        double late = Math.max(pf, opp);
+        double[] w = new double[7];
+        if (favoredSide(p)) {
+            double behind = opp - pf;
+            double want = steer * (Math.max(0, behind - slack * 0.5) * 7 + late * late * 0.7);
+            if (opponentNearWin()) want += 1.5;
+            want = Math.min(want, 3.5);
+            for (int r = 1; r <= 6; r++) w[r] = Math.exp(want * (rank[r] - 0.5) * 2);
+            if (sixes >= 2) w[6] *= 0.08;
+        } else {
+            double ahead = sideProgress(p) - pf;
+            double allowed = slack * (1 - late) + 0.05;
+            double damp = Math.min(3.5, steer * Math.max(0, ahead - allowed) * 9);
+            boolean favNear = favoredNearWin();
+            int favHome = homeCount(favored);
+            if (mode == TEAM && active[(favored + 2) % 4]) favHome = Math.max(favHome, homeCount((favored + 2) % 4));
+            for (int r = 1; r <= 6; r++) {
+                w[r] = Math.exp(-damp * (rank[r] - 0.5) * 2);
+                for (int t : movable(p, r)) {
+                    if (moveWins(p, t, r)) {
+                        w[r] = 0;
+                        break;
+                    }
+                    int to = target(p, t, r);
+                    if (to == HOME && homeCount(p) + 1 > favHome + 1) w[r] *= 0.1;
+                    // avoid parking another player one roll from victory while the chosen colour is far off
+                    if (!favNear && wouldBeNearWin(p, t, r)) w[r] *= 0.15;
+                    for (int[] cap : captures(p, to)) {
+                        if (favoredSide(cap[0]) && (pos[cap[0]][cap[1]] >= captureCut || late > 0.6)) w[r] *= 0.1;
+                    }
                 }
             }
-            if (!bad) {
-                ok.add(r);
-                if (r != 6) ok.add(r); // sixes are half as likely for the other players
-            }
         }
-        if (!ok.isEmpty()) return ok.get(rnd.nextInt(ok.size()));
-        if (!noMove.isEmpty()) return noMove.get(rnd.nextInt(noMove.size()));
-        // every roll would either win or capture: allow a capture but never a win
+        double sum = 0;
+        for (int r = 1; r <= 6; r++) sum += w[r];
+        if (sum <= 0) {
+            // every roll would win for this player: give one with no legal move
+            for (int r = 1; r <= 6; r++) if (movable(p, r).isEmpty()) return r;
+            return 1 + rnd.nextInt(6);
+        }
+        double x = rnd.nextDouble() * sum;
         for (int r = 1; r <= 6; r++) {
-            boolean wins = false;
-            for (int t : movable(p, r)) if (moveWins(p, t, r)) wins = true;
-            if (!wins) return r;
+            x -= w[r];
+            if (x <= 0 && w[r] > 0) return r;
         }
-        return 1 + rnd.nextInt(6);
+        for (int r = 6; r >= 1; r--) if (w[r] > 0) return r;
+        return 1;
     }
 
     /** Whether the player can legally be forced to move the given token given the rolled value. */
     boolean moveAllowed(int p, int t, int roll) {
         if (!canMove(p, t, roll)) return false;
         if (favored < 0 || favoredSide(p)) return true;
-        // non-favoured players may never win or capture the favoured colour
-        return !moveWins(p, t, roll) && !moveHitsFavored(p, t, roll);
+        // non-favoured players may never make the winning move
+        return !moveWins(p, t, roll);
     }
 
     List<Integer> allowedMoves(int p, int roll) {

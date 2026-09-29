@@ -35,11 +35,6 @@ class SplashScene extends Scene {
             float k = Math.min(1f, (t - STUDIO) / 350f);
             float s = 0.7f + 0.3f * k;
             Art.logo(c, 450, 800, 1.18f * s);
-            // loading dots
-            for (int i = 0; i < 3; i++) {
-                int a = ((t / 250) % 3 == i) ? 0xFFFFFFFF : 0x66FFFFFF;
-                Art.circle(c, 420 + i * 30, 1500, 9, a);
-            }
         } else {
             view.setScene(new HomeScene(view));
         }

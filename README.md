@@ -14,9 +14,10 @@ Tap the **gear** icon on the home screen (next to the avatar) to open **Settings
 **PIN lock:** tap **Set PIN** on the same screen and choose a 4–8 digit PIN. Winner Control stays visible to everyone, but changing the colour (or the PIN) then needs that PIN. The PIN is stored as a hash. If you forget it, clear the app's data in Android settings to reset it.
 
 Winner control works like this:
-- The chosen colour gets good rolls.
-- No other player can roll a number that finishes the game for them or captures a token of the chosen colour.
-- The chosen colour always wins, whether each player is a human or the computer.
+- Games look like normal, fair games. Every player gets a normal share of sixes and brings tokens out. The lead changes hands several times, and captures go both ways.
+- The dice are only nudged, and the nudge grows as the game goes on. A player who pulls too far ahead gets slightly weaker rolls, and the chosen colour gets slightly better rolls when it falls behind.
+- No other player is ever given the exact roll that would win the game, so the chosen colour always finishes first. Finishes are usually close.
+- How strong the nudge is, how far others may lead, and when captures of the chosen colour become rare are all randomised for each game, so no two games play out the same way.
 - In Team Up, the chosen colour's team wins.
 - If the chosen colour is not in the game, the dice are fair.
 
@@ -35,7 +36,7 @@ Rules:
 - Tokens on star and start squares are safe.
 
 ## Building
-The app is plain Java with every graphic drawn on a Canvas: there are no image assets and no Gradle. It builds with the Debian/Ubuntu Android SDK packages:
+The app is plain Java with every graphic drawn on a Canvas: there are no image assets and no Gradle. Fonts: Lilita One and Roboto Condensed (SIL Open Font License) and Luckiest Guy (Apache 2.0), in `app/assets/fonts` with their licences. It builds with the Debian/Ubuntu Android SDK packages:
 
 ```
 sudo apt-get install android-sdk-build-tools android-sdk-platform-23 dalvik-exchange apksigner zipalign

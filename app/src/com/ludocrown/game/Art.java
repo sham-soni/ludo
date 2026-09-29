@@ -16,9 +16,29 @@ final class Art {
     private Art() {}
 
     static final Paint P = new Paint(Paint.ANTI_ALIAS_FLAG);
-    static final Typeface BLACK = Typeface.create("sans-serif-black", Typeface.NORMAL);
-    static final Typeface BOLD = Typeface.create("sans-serif", Typeface.BOLD);
-    static final Typeface COND = Typeface.create("sans-serif-condensed", Typeface.BOLD);
+    /** Chunky rounded display font for titles and buttons (Lilita One). */
+    static Typeface BLACK = Typeface.create("sans-serif-black", Typeface.NORMAL);
+    /** Comic-style font for the big mode buttons (Luckiest Guy). */
+    static Typeface LUCKY = BLACK;
+    /** Heavy condensed text (Roboto Condensed Black). */
+    static Typeface BOLD = Typeface.create("sans-serif", Typeface.BOLD);
+    /** Condensed body text (Roboto Condensed Bold). */
+    static Typeface COND = Typeface.create("sans-serif-condensed", Typeface.BOLD);
+
+    static void init(android.content.Context ctx) {
+        BLACK = load(ctx, "lilita.ttf", BLACK);
+        LUCKY = load(ctx, "luckiest.ttf", BLACK);
+        BOLD = load(ctx, "robotocond_black.ttf", BOLD);
+        COND = load(ctx, "robotocond_bold.ttf", COND);
+    }
+
+    private static Typeface load(android.content.Context ctx, String name, Typeface fallback) {
+        try {
+            return Typeface.createFromAsset(ctx.getAssets(), "fonts/" + name);
+        } catch (RuntimeException e) {
+            return fallback;
+        }
+    }
     static final Typeface SERIF = Typeface.create(Typeface.SERIF, Typeface.BOLD);
     static final Typeface MONO = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD);
 
@@ -203,9 +223,13 @@ final class Art {
         rrectGrad(c, r.left, bandTop, r.right, r.bottom, 0, 0xFFFFD84A, 0xFFF0A000);
         rrect(c, r.left, bandTop, r.right, bandTop + 4, 0, 0xFFFFF3B0);
         c.restore();
-        Icons.draw(c, icon, r.centerX(), r.top + (bandTop - r.top) * 0.55f, r.height() * 0.42f);
+        c.restore();
+        c.save();
+        if (pressed) c.scale(0.95f, 0.95f, r.centerX(), r.centerY());
+        // icons are drawn large and pop out over the top edge, like the original buttons
+        Icons.draw(c, icon, r.centerX(), r.top + (bandTop - r.top) * 0.38f, r.height() * 0.56f);
         textFit(c, label, r.centerX(), bandTop + (r.bottom - bandTop) * 0.72f, r.height() * 0.2f, r.width() - 40,
-                0xFFFFFFFF, 0xFF4A2A00, 9, BLACK);
+                0xFFFFFFFF, 0xFF4A2A00, 9, LUCKY);
         c.restore();
     }
 
