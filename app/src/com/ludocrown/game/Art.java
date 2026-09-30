@@ -43,9 +43,22 @@ final class Art {
     static final Typeface MONO = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD);
 
     // Player colour indices: 0 red (top-left), 1 green (top-right), 2 yellow (bottom-right), 3 blue (bottom-left)
-    static final int[] COLOR = {0xFFE8202A, 0xFF0CA24B, 0xFFFEDB1F, 0xFF1E8FE8};
-    static final int[] BOARD = {0xFFE8202A, 0xFF0CA24B, 0xFFFEDB1F, 0xFF1C75BC};
-    static final int[] LIGHT = {0xFFFF7A7F, 0xFF5BE38C, 0xFFFFF27A, 0xFF7FD0FF};
+    static final int[] COLOR = {0xFFE8202A, 0xFF0E8A2E, 0xFFF5C518, 0xFF2BA8F2};
+    static final int[] BOARD = {0xFFE8202A, 0xFF0CA24B, 0xFFFEDB1F, 0xFF1FA3E6};
+    /** Darker shade the current player's home area blinks to (measured from the reference video). */
+    static final int[] ACTIVE = {0xFFA8121A, 0xFF07722F, 0xFFD4AE00, 0xFF1C6FB8};
+
+    static int lerp(int a, int b, float t) {
+        int r = 0;
+        for (int sh = 0; sh <= 24; sh += 8) {
+            int x = (a >>> sh) & 0xFF, y = (b >>> sh) & 0xFF;
+            r |= (Math.round(x + (y - x) * t) & 0xFF) << sh;
+        }
+        return r;
+    }
+    /** Colour of the yard spots and token bases (blue is the lighter track blue, as in the reference). */
+    static final int[] SPOT = {0xFFE8202A, 0xFF0CA24B, 0xFFFEDB1F, 0xFF29A9E1};
+    static final int[] LIGHT = {0xFFFF6A6F, 0xFF2FB852, 0xFFFFE45A, 0xFF4CC0FF};
     static final int[] DARK = {0xFF8E0B11, 0xFF03592A, 0xFFB08A00, 0xFF0A4A92};
     static final String[] NAME = {"Red", "Green", "Yellow", "Blue"};
 
@@ -399,44 +412,77 @@ final class Art {
      * Map-pin token like the one used on the board. (cx, cy) is the centre of the cell the pin stands on.
      */
     static void pin(Canvas c, float cx, float cy, float size, int color, boolean ghost) {
-        float headR = size * 0.30f;
-        float headY = cy - size * 0.40f;
-        float tipY = cy + size * 0.12f;
-        // base ring on the cell
-        reset();
-        P.setStyle(Paint.Style.STROKE);
-        P.setStrokeWidth(size * 0.07f);
-        P.setColor(0xFF7A1418);
-        R.set(cx - size * 0.28f, tipY - size * 0.15f, cx + size * 0.28f, tipY + size * 0.13f);
-        c.drawOval(R, P);
-        P.setColor(COLOR[color]);
-        P.setStrokeWidth(size * 0.05f);
-        R.set(cx - size * 0.2f, tipY - size * 0.1f, cx + size * 0.2f, tipY + size * 0.08f);
-        c.drawOval(R, P);
-        // white pin body
+        pin(c, cx, cy, size, color, ghost, true);
+    }
+
+    /**
+     * Map-pin token matching the reference: a silver teardrop with a flat coloured disc set into its head,
+     * a drop shadow to the right, and (optionally) a dark-red ring base under the tip.
+     * (cx, cy) is the cell centre plus 0.12 of a cell, size is 1.08 cells (as used by all callers).
+     * Proportions were measured from the reference screenshot, in cell units (u):
+     * head radius 0.47u, disc radius 0.33u, head centre 0.85u above the tip, tip 0.14u below the cell centre.
+     */
+    static void pin(Canvas c, float cx, float cy, float size, int color, boolean ghost, boolean base) {
+        float u = size / 1.08f;
+        float tipY = cy + 0.02f * u;
+        float headR = 0.47f * u;
+        float headY = tipY - 0.85f * u;
+        if (base) {
+            // dark-red ring under the tip (the yard spot supplies the colour in the yard)
+            reset();
+            P.setStyle(Paint.Style.STROKE);
+            P.setStrokeWidth(0.1f * u);
+            P.setShader(new RadialGradient(cx, tipY, 0.43f * u, new int[]{0xFF5A1010, 0xFF8A2A2A, 0xFF5A1010},
+                    new float[]{0.7f, 0.87f, 1f}, Shader.TileMode.CLAMP));
+            c.drawCircle(cx, tipY, 0.38f * u, P);
+            P.setShader(null);
+        }
+        // tangent points of the tip lines on the head circle
+        float d = tipY - headY;
+        float cosPhi = headR / d;
+        float sinPhi = (float) Math.sqrt(1 - cosPhi * cosPhi);
+        float tx = headR * sinPhi, ty = headY + headR * cosPhi;
+        // one continuous outline: around the head from the right tangent point to the left one, then to the tip
+        float phi = (float) Math.toDegrees(Math.acos(cosPhi));
         PATH.reset();
-        PATH.addCircle(cx, headY, headR * 1.38f, Path.Direction.CW);
-        PATH.moveTo(cx - headR * 1.15f, headY + headR * 0.75f);
+        PATH.moveTo(cx + tx, ty);
+        R.set(cx - headR, headY - headR, cx + headR, headY + headR);
+        PATH.arcTo(R, 90 - phi, -(360 - 2 * phi));
         PATH.lineTo(cx, tipY);
-        PATH.lineTo(cx + headR * 1.15f, headY + headR * 0.75f);
         PATH.close();
+        // soft drop shadow to the right
+        c.save();
+        c.translate(0.07f * u, 0.04f * u);
         reset();
-        P.setShader(new LinearGradient(cx - headR, 0, cx + headR * 1.4f, 0, 0xFFFFFFFF, 0xFF9EA7B3,
-                Shader.TileMode.CLAMP));
+        P.setColor(0x33000000);
+        c.drawPath(PATH, P);
+        c.translate(0.04f * u, 0.02f * u);
+        P.setColor(0x22000000);
+        c.drawPath(PATH, P);
+        c.restore();
+        // silver body
+        reset();
+        P.setShader(new LinearGradient(cx - headR, headY - headR, cx + headR, tipY,
+                new int[]{0xFFFFFFFF, 0xFFE8EBF0, 0xFFA9B0BA}, new float[]{0, 0.45f, 1}, Shader.TileMode.CLAMP));
         c.drawPath(PATH, P);
         P.setShader(null);
         P.setStyle(Paint.Style.STROKE);
-        P.setStrokeWidth(size * 0.025f);
-        P.setColor(0xFF55606E);
+        P.setStrokeWidth(0.035f * u);
+        P.setColor(0xFF4A505A);
         c.drawPath(PATH, P);
-        // coloured head
+        // coloured disc with a dark rim
+        float dr = 0.33f * u;
+        circle(c, cx, headY, dr + 0.035f * u, 0xFF101820);
         reset();
-        P.setShader(new RadialGradient(cx - headR * 0.35f, headY - headR * 0.4f, headR * 1.3f,
-                LIGHT[color], DARK[color], Shader.TileMode.CLAMP));
-        c.drawCircle(cx, headY, headR, P);
+        P.setShader(new LinearGradient(cx - dr, headY - dr, cx + dr, headY + dr, LIGHT[color], COLOR[color],
+                Shader.TileMode.CLAMP));
+        c.drawCircle(cx, headY, dr, P);
         P.setShader(null);
-        circle(c, cx - headR * 0.35f, headY - headR * 0.4f, headR * 0.28f, 0x99FFFFFF);
-        if (ghost) circle(c, cx, headY, headR * 1.4f, 0x66000000);
+        reset();
+        P.setShader(new LinearGradient(0, headY - dr, 0, headY + dr, 0x00000000, 0x33000000, Shader.TileMode.CLAMP));
+        c.drawCircle(cx, headY, dr, P);
+        P.setShader(null);
+        if (ghost) circle(c, cx, headY, headR, 0x66000000);
     }
 
     /** Flat round checker token (alternate token style). */
@@ -621,6 +667,91 @@ final class Art {
         pawn(c, -205, 425, 210, 3);
         pawn(c, 205, 425, 210, 2);
         c.restore();
+    }
+
+    // face normals (x right, y down, z towards the viewer) and the pip value on each face
+    private static final float[][] FACE_N = {{0, 0, 1}, {0, 0, -1}, {1, 0, 0}, {-1, 0, 0}, {0, 1, 0}, {0, -1, 0}};
+    private static final int[] FACE_V = {1, 6, 3, 4, 2, 5};
+    private static final Matrix CUBE_M = new Matrix();
+
+    /** Rotation (degrees about x, then y) that shows the given value face-on. */
+    static float[] cubeRestAngles(int value) {
+        switch (value) {
+            case 6: return new float[]{0, 180};
+            case 3: return new float[]{0, -90};
+            case 4: return new float[]{0, 90};
+            case 2: return new float[]{90, 0};
+            case 5: return new float[]{-90, 0};
+            default: return new float[]{0, 0};
+        }
+    }
+
+    private static float[] rot(float[] v, double ax, double ay, double az) {
+        double x = v[0], y = v[1], z = v[2];
+        double y1 = y * Math.cos(ax) - z * Math.sin(ax), z1 = y * Math.sin(ax) + z * Math.cos(ax);
+        double x2 = x * Math.cos(ay) + z1 * Math.sin(ay), z2 = -x * Math.sin(ay) + z1 * Math.cos(ay);
+        double x3 = x2 * Math.cos(az) - y1 * Math.sin(az), y3 = x2 * Math.sin(az) + y1 * Math.cos(az);
+        return new float[]{(float) x3, (float) y3, (float) z2};
+    }
+
+    /** A rotating 3D dice (a cube with rounded faces and pips), used while rolling. Angles in degrees. */
+    static void cube(Canvas c, float cx, float cy, float size, float rxDeg, float ryDeg, float rzDeg) {
+        double ax = Math.toRadians(rxDeg), ay = Math.toRadians(ryDeg), az = Math.toRadians(rzDeg);
+        float h = size / 2f;
+        // shadow
+        reset();
+        P.setColor(0x40000000);
+        R.set(cx - h * 0.9f, cy + h * 0.95f, cx + h * 0.9f, cy + h * 1.25f);
+        c.drawOval(R, P);
+        // draw faces back to front
+        Integer[] order = {0, 1, 2, 3, 4, 5};
+        final float[] depth = new float[6];
+        float[][] normals = new float[6][];
+        for (int f = 0; f < 6; f++) {
+            normals[f] = rot(FACE_N[f], ax, ay, az);
+            depth[f] = normals[f][2];
+        }
+        java.util.Arrays.sort(order, new java.util.Comparator<Integer>() {
+            @Override
+            public int compare(Integer a, Integer b) {
+                return Float.compare(depth[a], depth[b]);
+            }
+        });
+        for (int f : order) {
+            float[] n = normals[f];
+            if (n[2] <= 0.02f) continue;
+            // two in-face axes for this face
+            float[] nf = FACE_N[f];
+            float[] u = Math.abs(nf[0]) > 0.5f ? new float[]{0, 0, -nf[0]} : new float[]{1, 0, 0};
+            float[] v = Math.abs(nf[1]) > 0.5f ? new float[]{0, 0, nf[1]} : new float[]{0, 1, 0};
+            float[] src = {0, 0, 100, 0, 100, 100, 0, 100};
+            float[] dst = new float[8];
+            int[][] corners = {{-1, -1}, {1, -1}, {1, 1}, {-1, 1}};
+            for (int k = 0; k < 4; k++) {
+                float[] pnt = {nf[0] + u[0] * corners[k][0] + v[0] * corners[k][1],
+                        nf[1] + u[1] * corners[k][0] + v[1] * corners[k][1],
+                        nf[2] + u[2] * corners[k][0] + v[2] * corners[k][1]};
+                float[] r = rot(pnt, ax, ay, az);
+                float persp = 1f / (1f - r[2] * 0.12f);
+                dst[k * 2] = cx + r[0] * h * persp;
+                dst[k * 2 + 1] = cy + r[1] * h * persp;
+            }
+            CUBE_M.setPolyToPoly(src, 0, dst, 0, 4);
+            c.save();
+            c.concat(CUBE_M);
+            float light = 0.62f + 0.38f * n[2] - 0.12f * n[1];
+            int g = Math.max(0, Math.min(255, (int) (255 * light)));
+            int face = 0xFF000000 | (g << 16) | (g << 8) | g;
+            int edge = lerp(face, 0xFF000000, 0.25f);
+            rrect(c, 0, 0, 100, 100, 6, edge);
+            rrect(c, 2, 2, 98, 98, 18, face);
+            int val = FACE_V[f];
+            for (int idx : PIPS[val]) {
+                float px = 50 + ((idx % 3) - 1) * 27, py = 50 + ((idx / 3) - 1) * 27;
+                circle(c, px, py, val == 1 ? 12 : 9.5f, 0xFF141414);
+            }
+            c.restore();
+        }
     }
 
     static void dice3d(Canvas c, float cx, float cy, float s) {

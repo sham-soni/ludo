@@ -17,7 +17,7 @@ class BoardScene extends Scene {
     static final float BX = 18, BY = 570, BS = 862, CS = BS / 15f;
 
     private static final int S_ROLL = 0, S_ROLLING = 1, S_MOVE = 2, S_MOVING = 3, S_PASS = 4, S_OVER = 5;
-    private static final long ROLL_MS = 650, STEP_MS = 125, BACK_MS = 900;
+    private static final long ROLL_MS = 800, STEP_MS = 125, BACK_MS = 900;
 
     final GameConfig cfg;
     final LudoGame game;
@@ -40,6 +40,7 @@ class BoardScene extends Scene {
     // captured tokens flying back
     private final List<float[]> flying = new ArrayList<>(); // {player, token, fromProgress, startTime}
     private long landAt;
+    private float spinX, spinY, spinZ;
     private int stepsPlayed;
 
     private boolean paused;
@@ -172,6 +173,10 @@ class BoardScene extends Scene {
     private void startRoll() {
         pendingRoll = game.rollFor(turn, sixes);
         Sfx.play(Sfx.ROLL);
+        // random tumble for this roll (whole turns so it ends face-on)
+        spinX = 360 * (1 + game.rnd.nextInt(2)) * (game.rnd.nextBoolean() ? 1 : -1);
+        spinY = 360 * (1 + game.rnd.nextInt(2)) * (game.rnd.nextBoolean() ? 1 : -1);
+        spinZ = 90 * (game.rnd.nextInt(5) - 2);
         setState(S_ROLLING);
     }
 
@@ -283,16 +288,18 @@ class BoardScene extends Scene {
         // quadrants
         for (int p = 0; p < 4; p++) {
             float l = cx(QUAD[p][0]), t = cy(QUAD[p][1]);
-            Art.rrect(c, l, t, l + 6 * CS, t + 6 * CS, 0, Art.BOARD[p]);
+            int qc = Art.BOARD[p];
+            if (p == turn && state != S_OVER && cfg.active[p]) {
+                // the current player's home area blinks darker, as in the reference
+                float blink = (float) (0.5 + 0.5 * Math.sin(System.currentTimeMillis() / 170.0));
+                qc = Art.lerp(Art.BOARD[p], Art.ACTIVE[p], blink);
+            }
+            Art.rrect(c, l, t, l + 6 * CS, t + 6 * CS, 0, qc);
             Art.rrect(c, l + CS, t + CS, l + 5 * CS, t + 5 * CS, 0, 0xFFFFFFFF);
             for (int s = 0; s < 4; s++) {
-                Art.circle(c, cx(QUAD[p][0] + SLOT[s][0]), cy(QUAD[p][1] + SLOT[s][1]), CS * 0.55f, Art.BOARD[p]);
+                // yard spots sit 0.14 cell low, so a token's tip lands in the middle of its spot
+                Art.circle(c, cx(QUAD[p][0] + SLOT[s][0]), cy(QUAD[p][1] + SLOT[s][1] + 0.14f), CS * 0.54f, Art.SPOT[p]);
             }
-        }
-        if (state != S_OVER && cfg.active[turn]) {
-            float l = cx(QUAD[turn][0]), t = cy(QUAD[turn][1]);
-            int a = (int) (120 + 120 * Math.sin(System.currentTimeMillis() / 180.0));
-            Art.rrectStroke(c, l + CS * 0.5f, t + CS * 0.5f, l + 5.5f * CS, t + 5.5f * CS, 4, (a << 24) | 0xFFFFFF, 8);
         }
         // coloured track cells
         for (int i = 0; i < 5; i++) {
@@ -462,8 +469,19 @@ class BoardScene extends Scene {
             float f = Math.min(1f, k - i);
             int prevProg = i == 0 ? mvFrom : steps.get(i - 1);
             float[] a = spot(turn, mvToken, prevProg), b = spot(turn, mvToken, steps.get(i));
-            float x = a[0] + (b[0] - a[0]) * f, y = a[1] + (b[1] - a[1]) * f - (float) Math.sin(f * Math.PI) * CS * 0.45f;
-            Art.token(c, cfg.tokenStyle, x, y + CS * 0.12f, CS * 1.15f, turn);
+            // fading glow dots on the squares just passed
+            for (int j = 0; j < i; j++) {
+                long ago = now - (mvAt + (j + 1) * STEP_MS);
+                if (ago > 420) continue;
+                float[] sp = spot(turn, mvToken, steps.get(j));
+                int alpha = (int) (220 * (1 - ago / 420f));
+                Art.circle(c, sp[0], sp[1], CS * 0.2f, (alpha / 3 << 24) | (Art.LIGHT[turn] & 0xFFFFFF));
+                Art.circle(c, sp[0], sp[1], CS * 0.09f, (alpha << 24) | (Art.LIGHT[turn] & 0xFFFFFF));
+            }
+            float hopK = (float) Math.sin(f * Math.PI);
+            float x = a[0] + (b[0] - a[0]) * f, y = a[1] + (b[1] - a[1]) * f - hopK * CS * 0.45f;
+            // the token grows as it hops
+            Art.token(c, cfg.tokenStyle, x, y + CS * 0.12f, CS * (1.12f + 0.22f * hopK), turn);
         }
     }
 
@@ -475,32 +493,39 @@ class BoardScene extends Scene {
     private void drawDiceBox(Canvas c, int p) {
         RectF b = DICE_BOX[p];
         boolean mine = p == turn && state != S_OVER;
-        Art.glow(c, b.left, b.top, b.right, b.bottom, 14, mine ? 0xFFFFD000 : 0x66FFB000, mine ? 16 : 8);
-        Art.rrect(c, b.left - 4, b.top - 4, b.right + 4, b.bottom + 4, 16, 0xFFFFC21A);
-        Art.rrectGrad(c, b.left, b.top, b.right, b.bottom, 14, 0xFF1C4FB0, 0xFF0A2A7A);
-        float pinX = pinLeft(p) ? b.left + 56 : b.right - 56;
-        Art.rrectGrad(c, pinLeft(p) ? b.left : b.right - 112, b.top, pinLeft(p) ? b.left + 112 : b.right, b.bottom, 12,
-                Art.COLOR[p], 0xFF0A2A7A);
-        Art.token(c, cfg.tokenStyle, pinX, b.centerY() + 32, 100, p);
+        // two-part box as in the reference: a short blue pin panel and a taller pink dice panel
+        boolean left = pinLeft(p);
+        RectF pinPanel = left ? new RectF(b.left, b.top + 14, b.left + 118, b.bottom - 10)
+                : new RectF(b.right - 118, b.top + 14, b.right, b.bottom - 10);
         RectF d = diceRect(p);
-        Art.rrect(c, d.left - 3, d.top - 3, d.right + 3, d.bottom + 3, 14, 0xFFFFC21A);
-        Art.rrectGrad(c, d.left, d.top, d.right, d.bottom, 12, 0xFFF8E0E0, 0xFFE0B0B8);
+        RectF dicePanel = new RectF(d.left - 8, b.top, d.right + 8, b.bottom);
+        if (mine) {
+            Art.glow(c, dicePanel.left, dicePanel.top, dicePanel.right, dicePanel.bottom, 16, 0xFFFFD000, 14);
+        }
+        Art.rrect(c, pinPanel.left - 4, pinPanel.top - 4, pinPanel.right + 4, pinPanel.bottom + 4, 8, 0xFFFFC21A);
+        Art.reset();
+        Art.P.setShader(new android.graphics.LinearGradient(left ? pinPanel.left : pinPanel.right, 0,
+                left ? pinPanel.right : pinPanel.left, 0, new int[]{0xFF0A3FB8, 0xFF2E7FD8, 0xFFBFE6EE},
+                new float[]{0, 0.5f, 1}, android.graphics.Shader.TileMode.CLAMP));
+        c.drawRect(pinPanel, Art.P);
+        Art.P.setShader(null);
+        Art.pin(c, pinPanel.centerX(), pinPanel.centerY() + 32, 62, p, false, false);
+        Art.rrect(c, dicePanel.left - 4, dicePanel.top - 4, dicePanel.right + 4, dicePanel.bottom + 4, 16, 0xFFFFC21A);
+        Art.rrectGrad(c, dicePanel.left, dicePanel.top, dicePanel.right, dicePanel.bottom, 13, 0xFFF7E2E2, 0xFFE3AEB2);
+        Art.rrectStroke(c, dicePanel.left + 4, dicePanel.top + 4, dicePanel.right - 4, dicePanel.bottom - 4, 10,
+                0x55A05060, 2);
         if (cfg.bot[p]) Icons.robot(c, pinLeft(p) ? b.left + 20 : b.right - 20, b.top + 22, 26, 0xFFFFFFFF);
         if (mine) {
             long now = System.currentTimeMillis();
             if (state == S_ROLLING) {
-                // tumbling dice: spins and bounces, faces change slower as it settles
+                // 3D dice tumbles up out of the box and settles on the rolled face
                 float k = Math.min(1f, (now - stateAt) / (float) ROLL_MS);
-                int tick = (int) (Math.pow(k, 0.6) * 14);
-                int face = 1 + (int) (((tick * 7919L) ^ (turn * 31L)) % 6);
-                float rot = (1 - k) * (1 - k) * 540;
-                float hop = (float) Math.abs(Math.sin(k * Math.PI * 2.5)) * 38 * (1 - k);
-                float sc = 1 + 0.12f * (float) Math.sin(k * Math.PI);
-                Art.reset();
-                Art.P.setColor(0x44000000);
-                Art.R.set(d.centerX() - 40, d.centerY() + 40, d.centerX() + 40, d.centerY() + 54);
-                c.drawOval(Art.R, Art.P);
-                Art.dice(c, d.centerX(), d.centerY() - hop, 92 * sc, face, rot, 0xFFDADADA);
+                float e = 1 - (1 - k) * (1 - k) * (1 - k);
+                float[] rest = Art.cubeRestAngles(pendingRoll);
+                float rx = rest[0] + (1 - e) * spinX, ry = rest[1] + (1 - e) * spinY, rz = (1 - e) * spinZ;
+                float lift = (float) Math.sin(k * Math.PI) * 46;
+                float sc = 1 + 0.35f * (float) Math.sin(k * Math.PI);
+                Art.cube(c, d.centerX(), d.centerY() - lift, 78 * sc, rx, ry, rz);
             } else if (state == S_ROLL) {
                 float s = 92 + (float) Math.sin(now / 150.0) * 5;
                 Art.dice(c, d.centerX(), d.centerY(), s, dice, 0, 0xFFDADADA);
@@ -533,7 +558,8 @@ class BoardScene extends Scene {
         p.lineTo(x, y + 34);
         p.close();
         Art.reset();
-        Art.P.setShader(new android.graphics.LinearGradient(0, y - 34, 0, y + 34, 0xFFFFE040, 0xFFFF5A00,
+        // orange at the tip fading to yellow at the back, like the reference arrow
+        Art.P.setShader(new android.graphics.LinearGradient(x + d * 30, 0, x - d * 26, 0, 0xFFFF4A10, 0xFFFFE030,
                 android.graphics.Shader.TileMode.CLAMP));
         c.drawPath(p, Art.P);
         Art.P.setShader(null);
