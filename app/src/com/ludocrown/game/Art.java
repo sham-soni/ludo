@@ -698,11 +698,6 @@ final class Art {
     static void cube(Canvas c, float cx, float cy, float size, float rxDeg, float ryDeg, float rzDeg) {
         double ax = Math.toRadians(rxDeg), ay = Math.toRadians(ryDeg), az = Math.toRadians(rzDeg);
         float h = size / 2f;
-        // shadow
-        reset();
-        P.setColor(0x40000000);
-        R.set(cx - h * 0.9f, cy + h * 0.95f, cx + h * 0.9f, cy + h * 1.25f);
-        c.drawOval(R, P);
         // draw faces back to front
         Integer[] order = {0, 1, 2, 3, 4, 5};
         final float[] depth = new float[6];
@@ -717,14 +712,14 @@ final class Art {
                 return Float.compare(depth[a], depth[b]);
             }
         });
+        // pass 1: the solid body (sharp quads in the bevel colour) so the rounded faces never show gaps
+        float[][] quads = new float[6][];
         for (int f : order) {
             float[] n = normals[f];
             if (n[2] <= 0.02f) continue;
-            // two in-face axes for this face
             float[] nf = FACE_N[f];
             float[] u = Math.abs(nf[0]) > 0.5f ? new float[]{0, 0, -nf[0]} : new float[]{1, 0, 0};
             float[] v = Math.abs(nf[1]) > 0.5f ? new float[]{0, 0, nf[1]} : new float[]{0, 1, 0};
-            float[] src = {0, 0, 100, 0, 100, 100, 0, 100};
             float[] dst = new float[8];
             int[][] corners = {{-1, -1}, {1, -1}, {1, 1}, {-1, 1}};
             for (int k = 0; k < 4; k++) {
@@ -736,19 +731,40 @@ final class Art {
                 dst[k * 2] = cx + r[0] * h * persp;
                 dst[k * 2 + 1] = cy + r[1] * h * persp;
             }
-            CUBE_M.setPolyToPoly(src, 0, dst, 0, 4);
+            quads[f] = dst;
+            Path body = new Path();
+            body.moveTo(dst[0], dst[1]);
+            for (int k = 1; k < 4; k++) body.lineTo(dst[k * 2], dst[k * 2 + 1]);
+            body.close();
+            reset();
+            P.setColor(0xFF9A9EA6);
+            c.drawPath(body, P);
+            P.setStyle(Paint.Style.STROKE);
+            P.setStrokeWidth(size * 0.02f);
+            P.setStrokeJoin(Paint.Join.ROUND);
+            c.drawPath(body, P);
+        }
+        // pass 2: the rounded, softly shaded faces with pips
+        float[] src = {0, 0, 100, 0, 100, 100, 0, 100};
+        for (int f : order) {
+            if (quads[f] == null) continue;
+            float[] n = normals[f];
+            CUBE_M.setPolyToPoly(src, 0, quads[f], 0, 4);
             c.save();
             c.concat(CUBE_M);
             float light = 0.62f + 0.38f * n[2] - 0.12f * n[1];
             int g = Math.max(0, Math.min(255, (int) (255 * light)));
             int face = 0xFF000000 | (g << 16) | (g << 8) | g;
-            int edge = lerp(face, 0xFF000000, 0.25f);
-            rrect(c, 0, 0, 100, 100, 6, edge);
-            rrect(c, 2, 2, 98, 98, 18, face);
+            reset();
+            P.setShader(new RadialGradient(42, 40, 72, new int[]{lerp(face, 0xFFFFFFFF, 0.5f), face,
+                    lerp(face, 0xFF000000, 0.22f)}, new float[]{0, 0.55f, 1}, Shader.TileMode.CLAMP));
+            R.set(4, 4, 96, 96);
+            c.drawRoundRect(R, 26, 26, P);
+            P.setShader(null);
             int val = FACE_V[f];
             for (int idx : PIPS[val]) {
-                float px = 50 + ((idx % 3) - 1) * 27, py = 50 + ((idx / 3) - 1) * 27;
-                circle(c, px, py, val == 1 ? 12 : 9.5f, 0xFF141414);
+                float px = 50 + ((idx % 3) - 1) * 26, py = 50 + ((idx / 3) - 1) * 26;
+                circle(c, px, py, val == 1 ? 13 : 10.5f, 0xFF0E0E0E);
             }
             c.restore();
         }

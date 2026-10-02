@@ -9,8 +9,10 @@ import android.os.Vibrator;
 final class Sfx {
     private Sfx() {}
 
-    static final int ROLL = 0, STEP = 1, CAPTURE = 2, HOME = 3, SIX = 4, WIN = 5, CLICK = 6, TURN = 7;
-    private static final String[] FILES = {"roll", "step", "capture", "home", "six", "win", "click", "turn"};
+    static final int ROLL = 0, STEP = 1, CAPTURE = 2, HOME = 3, SIX = 4, WIN = 5, CLICK = 6, TURN = 7, PICK = 8,
+            ROLL2 = 9, ROLL3 = 10;
+    private static final String[] FILES = {"roll", "step", "capture", "home", "six", "win", "click", "turn", "pick",
+            "roll2", "roll3"};
     private static final int[] ids = new int[FILES.length];
     private static SoundPool pool;
     private static Vibrator vibrator;
@@ -31,6 +33,12 @@ final class Sfx {
 
     static void play(int s) {
         play(s, 1f);
+    }
+
+    /** One of the three dice-rattle variants, so consecutive rolls don't sound identical. */
+    static void playRoll() {
+        int[] v = {ROLL, ROLL2, ROLL3};
+        play(v[(int) (Math.random() * 3)]);
     }
 
     static void play(int s, float rate) {

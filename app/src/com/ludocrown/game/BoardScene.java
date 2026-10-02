@@ -17,7 +17,7 @@ class BoardScene extends Scene {
     static final float BX = 18, BY = 570, BS = 862, CS = BS / 15f;
 
     private static final int S_ROLL = 0, S_ROLLING = 1, S_MOVE = 2, S_MOVING = 3, S_PASS = 4, S_OVER = 5;
-    private static final long ROLL_MS = 420, STEP_MS = 240, BACK_MS = 900;
+    private static final long ROLL_MS = 340, STEP_MS = 240, BACK_MS = 900;
 
     final GameConfig cfg;
     final LudoGame game;
@@ -143,7 +143,7 @@ class BoardScene extends Scene {
                 int landed = (int) Math.min(steps.size(), (now - mvAt) / STEP_MS);
                 if (landed > stepsPlayed) {
                     stepsPlayed = landed;
-                    Sfx.play(Sfx.STEP, landed % 2 == 0 ? 1f : 1.12f);
+                    Sfx.play(Sfx.STEP);
                 }
                 if (now - mvAt >= steps.size() * STEP_MS) finishMove();
                 break;
@@ -172,11 +172,12 @@ class BoardScene extends Scene {
 
     private void startRoll() {
         pendingRoll = game.rollFor(turn, sixes);
-        Sfx.play(Sfx.ROLL);
+        Sfx.playRoll();
         // random tumble for this roll (whole turns so it ends face-on)
-        spinX = 360 * (1 + game.rnd.nextInt(2)) * (game.rnd.nextBoolean() ? 1 : -1);
-        spinY = 360 * (1 + game.rnd.nextInt(2)) * (game.rnd.nextBoolean() ? 1 : -1);
-        spinZ = 90 * (game.rnd.nextInt(5) - 2);
+        // mostly a spin about the vertical axis with a little tumble, like the reference
+        spinX = game.rnd.nextInt(10) < 3 ? 360 * (game.rnd.nextBoolean() ? 1 : -1) : 0;
+        spinY = 720 * (game.rnd.nextBoolean() ? 1 : -1);
+        spinZ = 90 * (game.rnd.nextInt(3) - 1);
         setState(S_ROLLING);
     }
 
@@ -184,7 +185,6 @@ class BoardScene extends Scene {
         dice = pendingRoll;
         lastDice[turn] = dice;
         landAt = System.currentTimeMillis();
-        if (dice == 6) Sfx.play(Sfx.SIX);
         if (dice == 6) sixes++;
         if (sixes >= 3) {
             view.toast("Three sixes in a row - turn lost");
@@ -197,6 +197,7 @@ class BoardScene extends Scene {
             return;
         }
         autoMove = !cfg.bot[turn] && (moves.size() == 1 || sameSpot(moves));
+        if (!cfg.bot[turn] && !autoMove) Sfx.play(Sfx.PICK); // beeps while the player picks a token
         setState(S_MOVE);
     }
 
@@ -261,7 +262,6 @@ class BoardScene extends Scene {
                 break;
             }
         }
-        if (!cfg.bot[turn]) Sfx.play(Sfx.TURN);
         setState(S_ROLL);
     }
 
@@ -520,13 +520,16 @@ class BoardScene extends Scene {
             if (state == S_ROLLING) {
                 // 3D dice tumbles up out of the box and settles on the rolled face
                 float k = Math.min(1f, (now - stateAt) / (float) ROLL_MS);
-                float e = 1 - (1 - k) * (1 - k) * (1 - k);
+                float e = k * (0.6f + 0.4f * k); // keeps spinning almost to the end, as in the reference
                 float[] rest = Art.cubeRestAngles(pendingRoll);
-                float rx = rest[0] + (1 - e) * spinX, ry = rest[1] + (1 - e) * spinY, rz = (1 - e) * spinZ;
-                // pops up to about 1.7x the box, as in the reference roll, then drops back in
-                float pop = (float) Math.sin(k * Math.PI);
-                float sc = 1 + 0.75f * pop;
-                Art.cube(c, d.centerX() - 10 * pop, d.centerY() - 22 * pop, 80 * sc, rx, ry, rz);
+                float rx = rest[0] + (1 - e) * spinX + 22 * (1 - e), ry = rest[1] + (1 - e) * spinY,
+                        rz = (1 - e) * spinZ + 12 * (1 - e);
+                // timing from the reference at 30 fps: tilts in the box, grows to ~1.9x within two frames,
+                // spins big for ~6 frames, then shrinks back and snaps flat
+                float pop = k < 0.15f ? k / 0.15f : (k > 0.82f ? (1 - k) / 0.18f : 1);
+                pop = pop * pop * (3 - 2 * pop);
+                float sc = 1 + 0.9f * pop + 0.05f * (float) Math.sin(k * Math.PI * 3);
+                Art.cube(c, d.centerX() - 16 * pop, d.centerY() - 6 * pop, 74 * sc, rx, ry, rz);
             } else if (state == S_ROLL) {
                 float s = 92 + (float) Math.sin(now / 150.0) * 5;
                 Art.dice(c, d.centerX(), d.centerY(), s, dice, 0, 0xFFDADADA);
