@@ -18,34 +18,55 @@ public class SfxGen {
         write(new File(dir, "turn.wav"), notes(new double[]{740}, 0.08, 0.2));
     }
 
-    /** Dice rattling in a cup: a burst of short, random clicks that thin out. */
+    /**
+     * Dice roll: a quick, bright rattle - about ten clicks in 0.3 s with most energy around 2.5-3 kHz
+     * (the character measured from the reference gameplay video; the sound itself is synthesised).
+     */
     static double[] roll() {
-        double[] s = new double[(int) (RATE * 0.6)];
-        Random r = new Random(3);
-        double t = 0;
-        while (t < 0.55) {
-            addClick(s, t, 0.6 * (1 - t / 0.7), 1800 + r.nextInt(2200), r);
-            t += 0.018 + r.nextDouble() * 0.05 * (0.4 + t * 2);
+        double[] s = new double[(int) (RATE * 0.34)];
+        Random r = new Random(11);
+        double t = 0.004;
+        int n = 0;
+        while (t < 0.30) {
+            double amp = 0.75 * (1 - 0.45 * t / 0.3) * (0.75 + 0.25 * r.nextDouble());
+            addTick(s, t, amp, 2350 + r.nextInt(900), 3300 + r.nextInt(700), r);
+            t += 0.024 + r.nextDouble() * 0.012;
+            n++;
         }
         return s;
     }
 
-    static void addClick(double[] s, double at, double amp, double freq, Random r) {
+    /** A hard plastic tick: two damped resonances plus a little noise. */
+    static void addTick(double[] s, double at, double amp, double f1, double f2, Random r) {
         int start = (int) (at * RATE);
-        int len = (int) (RATE * 0.012);
+        int len = (int) (RATE * 0.02);
+        double noise = 0;
         for (int i = 0; i < len && start + i < s.length; i++) {
-            double env = Math.exp(-i / (len * 0.25));
-            s[start + i] += amp * env * (0.6 * Math.sin(2 * Math.PI * freq * i / RATE) + 0.4 * (r.nextDouble() * 2 - 1));
+            double t = i / (double) RATE;
+            double env = Math.exp(-t * 320);
+            noise = 0.6 * noise + 0.4 * (r.nextDouble() * 2 - 1); // softened noise, keeps the tick from hissing
+            s[start + i] += amp * env * (0.6 * Math.sin(2 * Math.PI * f1 * t) + 0.22 * Math.sin(2 * Math.PI * f2 * t)
+                    + 0.18 * noise);
         }
     }
 
-    /** Short wooden "tok" for each square a token moves. */
+    static void addClick(double[] s, double at, double amp, double freq, Random r) {
+        addTick(s, at, amp, freq, freq * 1.4, r);
+    }
+
+    /**
+     * Token step: a short pitched "pop" around 1.47 kHz lasting under 0.1 s. The game plays it at two
+     * alternating rates so successive squares go "pip-pop".
+     */
     static double[] step() {
-        double[] s = new double[(int) (RATE * 0.07)];
+        double[] s = new double[(int) (RATE * 0.095)];
+        double ph = 0;
         for (int i = 0; i < s.length; i++) {
             double t = i / (double) RATE;
-            double f = 900 - 3000 * t;
-            s[i] = 0.7 * Math.exp(-t * 60) * Math.sin(2 * Math.PI * f * t) + 0.25 * Math.exp(-t * 90) * Math.sin(2 * Math.PI * 2400 * t);
+            double f = 1470 * (1 + 0.18 * Math.exp(-t * 90));
+            ph += 2 * Math.PI * f / RATE;
+            double env = Math.min(1, t * 900) * Math.exp(-t * 26);
+            s[i] = 0.75 * env * (Math.sin(ph) + 0.18 * Math.sin(2 * ph));
         }
         return s;
     }

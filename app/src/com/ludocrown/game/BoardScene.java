@@ -17,7 +17,7 @@ class BoardScene extends Scene {
     static final float BX = 18, BY = 570, BS = 862, CS = BS / 15f;
 
     private static final int S_ROLL = 0, S_ROLLING = 1, S_MOVE = 2, S_MOVING = 3, S_PASS = 4, S_OVER = 5;
-    private static final long ROLL_MS = 800, STEP_MS = 125, BACK_MS = 900;
+    private static final long ROLL_MS = 420, STEP_MS = 240, BACK_MS = 900;
 
     final GameConfig cfg;
     final LudoGame game;
@@ -143,7 +143,7 @@ class BoardScene extends Scene {
                 int landed = (int) Math.min(steps.size(), (now - mvAt) / STEP_MS);
                 if (landed > stepsPlayed) {
                     stepsPlayed = landed;
-                    Sfx.play(Sfx.STEP, 0.9f + 0.03f * (landed % 5));
+                    Sfx.play(Sfx.STEP, landed % 2 == 0 ? 1f : 1.12f);
                 }
                 if (now - mvAt >= steps.size() * STEP_MS) finishMove();
                 break;
@@ -523,9 +523,10 @@ class BoardScene extends Scene {
                 float e = 1 - (1 - k) * (1 - k) * (1 - k);
                 float[] rest = Art.cubeRestAngles(pendingRoll);
                 float rx = rest[0] + (1 - e) * spinX, ry = rest[1] + (1 - e) * spinY, rz = (1 - e) * spinZ;
-                float lift = (float) Math.sin(k * Math.PI) * 46;
-                float sc = 1 + 0.35f * (float) Math.sin(k * Math.PI);
-                Art.cube(c, d.centerX(), d.centerY() - lift, 78 * sc, rx, ry, rz);
+                // pops up to about 1.7x the box, as in the reference roll, then drops back in
+                float pop = (float) Math.sin(k * Math.PI);
+                float sc = 1 + 0.75f * pop;
+                Art.cube(c, d.centerX() - 10 * pop, d.centerY() - 22 * pop, 80 * sc, rx, ry, rz);
             } else if (state == S_ROLL) {
                 float s = 92 + (float) Math.sin(now / 150.0) * 5;
                 Art.dice(c, d.centerX(), d.centerY(), s, dice, 0, 0xFFDADADA);

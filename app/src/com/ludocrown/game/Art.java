@@ -801,46 +801,101 @@ final class Art {
 
     // ---------------------------------------------------------------- background
 
-    /** Blue tiled background with big dice-face squares rotated, similar to the board-game wallpaper. */
+    /**
+     * Background: a tiled pattern of whole Ludo boards in muted blue/indigo tones, rotated about 20 degrees,
+     * lit from the centre-left and darker towards the edges (the style of the reference game's backdrop,
+     * drawn from scratch).
+     */
     static Bitmap pattern(int w, int h) {
         Bitmap bmp = Bitmap.createBitmap(Math.max(1, w), Math.max(1, h), Bitmap.Config.ARGB_8888);
         Canvas c = new Canvas(bmp);
         reset();
-        P.setShader(new RadialGradient(w / 2f, h * 0.45f, Math.max(w, h) * 0.75f, 0xFF2D6FD0, 0xFF16398F,
-                Shader.TileMode.CLAMP));
+        P.setColor(0xFF2B6BD2);
         c.drawRect(0, 0, w, h, P);
-        P.setShader(null);
-        float unit = w / 3.2f;
+        float u = Math.max(w, 1) / 17f; // one board cell
+        float tile = 15 * u;
         c.save();
-        c.rotate(-28, w / 2f, h / 2f);
-        int n = (int) (Math.max(w, h) * 1.6f / unit) + 2;
-        float sx = w / 2f - n * unit / 2f, sy = h / 2f - n * unit / 2f;
+        c.rotate(-21, w / 2f, h / 2f);
+        int n = (int) (Math.hypot(w, h) / tile) + 3;
+        float ox = w / 2f - n * tile / 2f, oy = h / 2f - n * tile / 2f;
+        int[] tints = {0xFF2F4DB0, 0xFF2F86D8, 0xFF2A7DBC, 0xFF233F96, 0xFF3A64CA};
         for (int i = 0; i < n; i++) {
             for (int j = 0; j < n; j++) {
-                float x = sx + i * unit, y = sy + j * unit;
-                int kind = (i + j * 2) % 4;
-                // tile block
-                rrect(c, x + unit * 0.06f, y + unit * 0.06f, x + unit * 0.94f, y + unit * 0.94f, unit * 0.04f,
-                        kind == 0 ? 0x2A7FB5FF : 0x1A0A1F70);
-                rrect(c, x + unit * 0.18f, y + unit * 0.18f, x + unit * 0.82f, y + unit * 0.82f, unit * 0.02f,
-                        0x24FFFFFF);
-                float pr = unit * 0.07f;
-                int pc = kind == 1 ? 0x552A1A7A : (kind == 2 ? 0x4418A060 : 0x44103A90);
-                circle(c, x + unit * 0.35f, y + unit * 0.35f, pr, pc);
-                circle(c, x + unit * 0.65f, y + unit * 0.35f, pr, pc);
-                circle(c, x + unit * 0.35f, y + unit * 0.65f, pr, pc);
-                circle(c, x + unit * 0.65f, y + unit * 0.65f, pr, pc);
-                reset();
-                P.setColor(0x1CFFFFFF);
-                P.setStyle(Paint.Style.STROKE);
-                P.setStrokeWidth(2);
-                for (int k = 1; k < 6; k++) {
-                    c.drawLine(x + unit * 0.94f, y + unit * k / 6f, x + unit, y + unit * k / 6f, P);
-                }
-                if ((i + j) % 3 == 0) star(c, x + unit * 0.97f, y + unit * 0.5f, unit * 0.04f, 0, 0x33FFFFFF, 2);
+                bgBoard(c, ox + i * tile, oy + j * tile, u, tints, i * 3 + j * 7);
             }
         }
         c.restore();
+        // lighting: soft light from the centre-left, darker corners
+        reset();
+        P.setShader(new RadialGradient(w * 0.32f, h * 0.5f, Math.max(w, h) * 0.62f,
+                new int[]{0x26FFFFFF, 0x00000000, 0xB0000818}, new float[]{0, 0.4f, 1}, Shader.TileMode.CLAMP));
+        c.drawRect(0, 0, w, h, P);
+        P.setShader(new LinearGradient(0, h * 0.15f, w, h * 0.85f,
+                new int[]{0x00FFFFFF, 0x14FFFFFF, 0x00FFFFFF}, new float[]{0.2f, 0.5f, 0.8f}, Shader.TileMode.CLAMP));
+        c.drawRect(0, 0, w, h, P);
+        P.setShader(null);
         return bmp;
+    }
+
+    /** One faint Ludo board of the background pattern, top-left at (x, y), cell size u. */
+    private static void bgBoard(Canvas c, float x, float y, float u, int[] tints, int seed) {
+        int track = 0xFF2B6BD2;
+        int line = 0x2AB8D4FF;
+        reset();
+        P.setColor(track);
+        c.drawRect(x, y, x + 15 * u, y + 15 * u, P);
+        float[][] q = {{0, 0}, {9, 0}, {9, 9}, {0, 9}};
+        for (int k = 0; k < 4; k++) {
+            int col = tints[(seed + k * 2) % tints.length];
+            float qx = x + q[k][0] * u, qy = y + q[k][1] * u;
+            rrect(c, qx, qy, qx + 6 * u, qy + 6 * u, 0, col);
+            rrect(c, qx + u, qy + u, qx + 5 * u, qy + 5 * u, 0, lerp(col, 0xFF6FA8F0, 0.35f));
+            int dot = lerp(col, 0xFF0A1A50, 0.18f);
+            circle(c, qx + 2 * u, qy + 2 * u, 0.55f * u, dot);
+            circle(c, qx + 4 * u, qy + 2 * u, 0.55f * u, dot);
+            circle(c, qx + 2 * u, qy + 4 * u, 0.55f * u, dot);
+            circle(c, qx + 4 * u, qy + 4 * u, 0.55f * u, dot);
+            // home lane in the quadrant's tint
+            int lane = lerp(track, col, 0.6f);
+            if (k == 0) rrect(c, x + u, y + 7 * u, x + 6 * u, y + 8 * u, 0, lane);
+            if (k == 1) rrect(c, x + 7 * u, y + u, x + 8 * u, y + 6 * u, 0, lane);
+            if (k == 2) rrect(c, x + 9 * u, y + 7 * u, x + 14 * u, y + 8 * u, 0, lane);
+            if (k == 3) rrect(c, x + 7 * u, y + 9 * u, x + 8 * u, y + 14 * u, 0, lane);
+        }
+        // grid lines on the arms
+        reset();
+        P.setColor(line);
+        P.setStrokeWidth(Math.max(1, u * 0.05f));
+        for (int i = 0; i <= 15; i++) {
+            float v = i * u;
+            if (i >= 6 && i <= 9) {
+                c.drawLine(x + v, y, x + v, y + 6 * u, P);
+                c.drawLine(x + v, y + 9 * u, x + v, y + 15 * u, P);
+                c.drawLine(x, y + v, x + 6 * u, y + v, P);
+                c.drawLine(x + 9 * u, y + v, x + 15 * u, y + v, P);
+            }
+            if (i <= 6 || i >= 9) {
+                c.drawLine(x + 6 * u, y + v, x + 9 * u, y + v, P);
+                c.drawLine(x + v, y + 6 * u, x + v, y + 9 * u, P);
+            }
+        }
+        // stars and centre
+        int[][] stars = {{6, 2}, {12, 6}, {8, 12}, {2, 8}};
+        for (int[] st : stars) star(c, x + (st[0] + 0.5f) * u, y + (st[1] + 0.5f) * u, 0.35f * u, 0, 0x50C8DCFF, Math.max(1, u * 0.05f));
+        Path p = new Path();
+        float mx = x + 7.5f * u, my = y + 7.5f * u;
+        int[] tri = {lerp(tints[seed % tints.length], 0xFF000000, 0.1f), lerp(track, 0xFFFFFFFF, 0.08f)};
+        for (int k = 0; k < 4; k++) {
+            p.reset();
+            float ax = x + (k == 2 ? 9 : 6) * u, ay = y + (k == 3 ? 9 : 6) * u;
+            float bx = x + (k == 0 ? 6 : 9) * u, by = y + (k == 1 ? 6 : 9) * u;
+            p.moveTo(ax, ay);
+            p.lineTo(bx, by);
+            p.lineTo(mx, my);
+            p.close();
+            reset();
+            P.setColor(tri[k % 2]);
+            c.drawPath(p, P);
+        }
     }
 }
