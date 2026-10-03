@@ -27,22 +27,39 @@ public class SfxGen {
      * (~1.4-2 kHz). Each seed gives a slightly different shake.
      */
     static double[] roll(int seed) {
-        double[] s = new double[(int) (RATE * 0.32)];
+        // Continuous dense rattle (measured on the reference: level stays up for ~0.29 s with no gaps, then
+        // stops abruptly): overlapping ticks every 8-16 ms over a band-limited noise bed around 2-3 kHz.
+        double len = 0.29;
+        double[] s = new double[(int) (RATE * (len + 0.03))];
         Random r = new Random(seed);
-        double t = 0.006 + r.nextDouble() * 0.01;
-        for (int burst = 0; burst < 2; burst++) {
-            int clicks = 5 + r.nextInt(2);
-            for (int k = 0; k < clicks; k++) {
-                boolean first = burst == 0 && k == 0;
-                double f1 = first ? 1400 + r.nextInt(600) : 1500 + r.nextInt(1700);
-                double f2 = 2000 + r.nextInt(1000);
-                double amp = (0.55 + 0.45 * r.nextDouble()) * (burst == 1 && k > 0 && k < 3 ? 1.0 : 0.75);
-                addTick(s, t, amp, f1, f2, r);
-                t += 0.016 + r.nextDouble() * 0.008 + (burst == 1 ? 0.006 : 0);
-            }
-            t += 0.03 + r.nextDouble() * 0.02;
+        double t = 0.01 + r.nextDouble() * 0.008;
+        while (t < len - 0.01) {
+            boolean first = t < 0.02;
+            double f1 = first ? 1400 + r.nextInt(600) : 1500 + r.nextInt(1700);
+            double f2 = 2000 + r.nextInt(1000);
+            addTick(s, t, 0.45 + 0.5 * r.nextDouble(), f1, f2, r);
+            t += 0.008 + r.nextDouble() * 0.008;
+        }
+        // noise bed: two resonators driven by noise, gated to the rattle length
+        double y1 = 0, y2 = 0, z1 = 0, z2 = 0;
+        double[] c1 = reson(2400, 900), c2 = reson(3200, 1200);
+        for (int i = 0; i < s.length; i++) {
+            double tt = i / (double) RATE;
+            double g = tt < 0.012 ? tt / 0.012 : (tt < len ? 1 : Math.max(0, 1 - (tt - len) / 0.008));
+            g *= 0.8 + 0.2 * Math.sin(tt * 2 * Math.PI * 23);
+            double x = r.nextDouble() * 2 - 1;
+            double a = c1[0] * x - c1[1] * y1 - c1[2] * y2; y2 = y1; y1 = a;
+            double b = c2[0] * x - c2[1] * z1 - c2[2] * z2; z2 = z1; z1 = b;
+            s[i] += g * 0.16 * (a + 0.7 * b);
         }
         return s;
+    }
+
+    /** Two-pole resonator coefficients {gain, a1, a2} for centre frequency f and bandwidth bw (Hz). */
+    static double[] reson(double f, double bw) {
+        double rr = Math.exp(-Math.PI * bw / RATE);
+        double a1 = -2 * rr * Math.cos(2 * Math.PI * f / RATE), a2 = rr * rr;
+        return new double[]{(1 - rr) * 2, a1, a2};
     }
 
     /** A hard plastic tick: two damped resonances plus a little noise. */

@@ -275,15 +275,23 @@ class BoardScene extends Scene {
         for (int p = 0; p < 4; p++) if (cfg.active[p]) drawDiceBox(c, p);
         Icons.menu(c, 97, 1910, 62);
         // "no ads" badge like the original layout
-        Art.circle(c, 825, 1900, 52, 0xFF6A0A6A);
-        Art.circle(c, 825, 1900, 46, 0xFFB03AD0);
-        Art.textC(c, "NO", 825, 1893, 30, 0xFFFFFFFF, 0xFF6A0A2A, 5, Art.BLACK);
-        Art.textC(c, "ADS", 825, 1925, 30, 0xFFFFFFFF, 0xFF6A0A2A, 5, Art.BLACK);
+        // "no ads" badge: dark-red disc with a pink rim and tilted comic lettering
+        Art.circle(c, 825, 1900, 56, 0xFFF0C8E0);
+        Art.circle(c, 825, 1900, 50, 0xFF5A0820);
+        Art.reset();
+        Art.P.setShader(new android.graphics.RadialGradient(812, 1885, 52, 0xFFB0204A, 0xFF4A0618,
+                android.graphics.Shader.TileMode.CLAMP));
+        c.drawCircle(825, 1900, 46, Art.P);
+        Art.P.setShader(null);
+        c.save();
+        c.rotate(-22, 825, 1900);
+        Art.textC(c, "NO", 818, 1893, 38, 0xFFFFF0F4, 0xFF2A0010, 6, Art.LUCKY);
+        Art.textC(c, "ADS", 830, 1930, 38, 0xFFFFF0F4, 0xFF2A0010, 6, Art.LUCKY);
+        c.restore();
         if (paused) drawPause(c);
     }
 
     private void drawBoard(Canvas c) {
-        Art.rrect(c, BX - 6, BY - 6, BX + BS + 6, BY + BS + 6, 4, 0x55000000);
         Art.rrect(c, BX, BY, BX + BS, BY + BS, 0, 0xFFFFFFFF);
         // quadrants
         for (int p = 0; p < 4; p++) {
@@ -343,7 +351,6 @@ class BoardScene extends Scene {
         triangle(c, cx(6), cy(6), cx(9), cy(6), mx, my, Art.BOARD[1]);
         triangle(c, cx(9), cy(6), cx(9), cy(9), mx, my, Art.BOARD[2]);
         triangle(c, cx(6), cy(9), cx(9), cy(9), mx, my, 0xFF29A9E1);
-        Art.rrectStroke(c, BX, BY, BX + BS, BY + BS, 0, 0xFF888888, 2);
         // names
         for (int p = 0; p < 4; p++) {
             if (!cfg.active[p]) continue;
@@ -531,7 +538,7 @@ class BoardScene extends Scene {
                 int fi = Math.min(sizes.length - 2, (int) fk);
                 float sc = sizes[fi] + (sizes[fi + 1] - sizes[fi]) * (fk - fi);
                 float pop = (sc - 1) / 0.7f;
-                Art.cube(c, d.centerX() - 10 * pop, d.centerY() - 12 * pop, 90 * sc, rx, ry, rz);
+                Art.cube(c, d.centerX() - 8 * pop, d.centerY() - 10 * pop, 80 * sc, rx, ry, rz);
             } else if (state == S_ROLL) {
                 float s = 92 + (float) Math.sin(now / 150.0) * 5;
                 Art.dice(c, d.centerX(), d.centerY(), s, dice, 0, 0xFFDADADA);
@@ -546,9 +553,6 @@ class BoardScene extends Scene {
                 float sc = 1 + 0.14f * (1 - t) * (float) Math.cos(t * Math.PI * 1.5);
                 Art.dice(c, d.centerX(), d.centerY(), 92 * sc, dice, 0, 0xFFDADADA);
             }
-        } else if (lastDice[p] > 0 && state != S_OVER) {
-            // faded last roll for other players
-            Art.dice(c, d.centerX(), d.centerY(), 70, 0, 0, 0xFFF0D8D8);
         }
     }
 

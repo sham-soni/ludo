@@ -919,7 +919,7 @@ final class Art {
         for (int[] st : stars) star(c, x + (st[0] + 0.5f) * u, y + (st[1] + 0.5f) * u, 0.35f * u, 0, 0x50C8DCFF, Math.max(1, u * 0.05f));
         Path p = new Path();
         float mx = x + 7.5f * u, my = y + 7.5f * u;
-        int[] tri = {lerp(tints[seed % tints.length], 0xFF000000, 0.1f), lerp(track, 0xFFFFFFFF, 0.08f)};
+        int[] tri = {lerp(track, tints[seed % tints.length], 0.35f), lerp(track, 0xFFFFFFFF, 0.05f)};
         for (int k = 0; k < 4; k++) {
             p.reset();
             float ax = x + (k == 2 ? 9 : 6) * u, ay = y + (k == 3 ? 9 : 6) * u;
