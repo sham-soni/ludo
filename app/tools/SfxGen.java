@@ -50,12 +50,14 @@ public class SfxGen {
         int start = (int) (at * RATE);
         int len = (int) (RATE * 0.02);
         double noise = 0;
+        double f3 = 3700 + r.nextInt(800);
         for (int i = 0; i < len && start + i < s.length; i++) {
             double t = i / (double) RATE;
             double env = Math.exp(-t * 230);
-            noise = 0.6 * noise + 0.4 * (r.nextDouble() * 2 - 1); // softened noise, keeps the tick from hissing
+            noise = 0.75 * noise + 0.25 * (r.nextDouble() * 2 - 1); // softened noise, keeps the tick from hissing
             s[start + i] += amp * env * (0.6 * Math.sin(2 * Math.PI * f1 * t) + 0.22 * Math.sin(2 * Math.PI * f2 * t)
-                    + 0.18 * noise);
+                    + 0.2 * Math.sin(2 * Math.PI * f3 * t) + 0.14 * Math.exp(-t * 120) * Math.sin(2 * Math.PI * 1100 * t)
+                    + 0.16 * noise);
         }
     }
 
@@ -68,6 +70,18 @@ public class SfxGen {
      * then a "bloop" that sweeps up from ~520 Hz to ~1.65 kHz over 30 ms and falls back to ~400 Hz,
      * loudest around 50-60 ms and gone by ~95 ms.
      */
+    static final double[] clickNoise = new double[512];
+
+    static {
+        Random r = new Random(9);
+        double prev = 0;
+        for (int i = 0; i < clickNoise.length; i++) {
+            double v = r.nextDouble() * 2 - 1;
+            clickNoise[i] = v - prev; // high-passed noise
+            prev = v;
+        }
+    }
+
     static double[] step() {
         double[] s = new double[(int) (RATE * 0.11)];
         // pitch knots of the bloop (seconds after it starts, Hz), interpolated in log-frequency
@@ -80,7 +94,12 @@ public class SfxGen {
                 double f = 1480 + 1250 * Math.exp(-t * 110);
                 ph2 += 2 * Math.PI * f / RATE;
                 double e = Math.min(1, t * 3000) * (t < 0.018 ? 1 : Math.exp(-(t - 0.018) * 260));
-                s[i] += 0.95 * e * Math.sin(ph2);
+                s[i] += 0.95 * e * (Math.sin(ph2) + 0.3 * Math.sin(2 * ph2)
+                        + 0.6 * clickNoise[(i * 7) % clickNoise.length]); // noisy, crisp texture
+            }
+            if (t < 0.004) { // crisp broadband click at the very start
+                double n = clickNoise[i % clickNoise.length];
+                s[i] += 0.9 * (1 - t / 0.004) * n;
             }
             double u = t - 0.026;
             if (u >= 0) {
@@ -117,7 +136,8 @@ public class SfxGen {
                 double t = i / (double) RATE;
                 double env = Math.min(1, t * 400) * Math.min(1, (0.055 - t) * 400);
                 double w = 2 * Math.PI * 877 * t;
-                s[start + i] = 0.5 * env * (0.45 * Math.sin(w) + 0.9 * Math.sin(2 * w) + 0.35 * Math.sin(3 * w));
+                s[start + i] = 0.5 * env * (0.45 * Math.sin(w) + 0.9 * Math.sin(2 * w) + 0.03 * Math.sin(3 * w)
+                        + 0.04 * Math.sin(4 * w) + 0.025 * Math.sin(5 * w));
             }
         }
         return s;
@@ -137,12 +157,15 @@ public class SfxGen {
             int start = (int) (t * RATE);
             int len = (int) (0.045 * RATE);
             double f1 = 2650 + r.nextInt(600), f2 = 3000 + r.nextInt(600);
-            double noise = 0, amp = 0.35 + 0.25 * r.nextDouble();
+            double prev = 0, amp = 0.35 + 0.25 * r.nextDouble(), f3 = 3800 + r.nextInt(800);
             for (int i = 0; i < len && start + i < s.length; i++) {
                 double u = i / (double) RATE;
-                noise = 0.45 * noise + 0.55 * (r.nextDouble() * 2 - 1);
+                double v = r.nextDouble() * 2 - 1;
+                double noise = v - prev; // high-passed: no boom below 1 kHz
+                prev = v;
                 double e = Math.exp(-u * 70);
-                s[start + i] += amp * env * e * (0.42 * noise + 0.4 * Math.sin(2 * Math.PI * f1 * u) + 0.32 * Math.sin(2 * Math.PI * f2 * u));
+                s[start + i] += amp * env * e * (0.3 * noise + 0.4 * Math.sin(2 * Math.PI * f1 * u)
+                        + 0.32 * Math.sin(2 * Math.PI * f2 * u) + 0.3 * Math.sin(2 * Math.PI * f3 * u));
             }
             t += 0.016 + r.nextDouble() * 0.03; // dense, irregular rattle
         }
@@ -177,6 +200,13 @@ public class SfxGen {
     }
 
     static void write(File f, double[] s) throws IOException {
+        // two-pole low-pass around 7 kHz, matching the reference's roll-off above 8 kHz
+        double a = Math.exp(-2 * Math.PI * 7000.0 / RATE), y1 = 0, y2 = 0;
+        for (int i = 0; i < s.length; i++) {
+            y1 = (1 - a) * s[i] + a * y1;
+            y2 = (1 - a) * y1 + a * y2;
+            s[i] = y2;
+        }
         double peak = 0;
         for (double v : s) peak = Math.max(peak, Math.abs(v));
         double gain = peak > 0.95 ? 0.95 / peak : 1;

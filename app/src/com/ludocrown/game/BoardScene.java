@@ -175,9 +175,9 @@ class BoardScene extends Scene {
         Sfx.playRoll();
         // random tumble for this roll (whole turns so it ends face-on)
         // mostly a spin about the vertical axis with a little tumble, like the reference
-        spinX = game.rnd.nextInt(10) < 3 ? 360 * (game.rnd.nextBoolean() ? 1 : -1) : 0;
+        spinX = 0;
         spinY = 720 * (game.rnd.nextBoolean() ? 1 : -1);
-        spinZ = 90 * (game.rnd.nextInt(3) - 1);
+        spinZ = 0;
         setState(S_ROLLING);
     }
 
@@ -436,9 +436,8 @@ class BoardScene extends Scene {
             if (game.pos[d.p][d.t] == LudoGame.HOME) size = CS * 0.62f;
             float bob = 0;
             if (d.highlight) {
-                float pulse = (float) (0.5 + 0.5 * Math.sin(now / 130.0));
-                Art.ring(c, d.x, d.y + CS * 0.1f, CS * (0.38f + 0.1f * pulse), 0xEEFFFFFF, 5);
-                bob = -(float) Math.abs(Math.sin(now / 200.0)) * 10;
+                // as in the reference: the token stays still and a dashed white/dark ring spins round its base
+                Art.dashedRing(c, d.x, d.y + CS * 0.14f, CS * 0.5f * d.scale, CS * 0.12f * d.scale, (now % 1152) / 3.2f);
             }
             Art.token(c, cfg.tokenStyle, d.x, d.y + CS * 0.12f + bob, size, d.p);
         }
@@ -522,14 +521,17 @@ class BoardScene extends Scene {
                 float k = Math.min(1f, (now - stateAt) / (float) ROLL_MS);
                 float e = k * (0.6f + 0.4f * k); // keeps spinning almost to the end, as in the reference
                 float[] rest = Art.cubeRestAngles(pendingRoll);
-                float rx = rest[0] + (1 - e) * spinX + 22 * (1 - e), ry = rest[1] + (1 - e) * spinY,
-                        rz = (1 - e) * spinZ + 12 * (1 - e);
-                // timing from the reference at 30 fps: tilts in the box, grows to ~1.9x within two frames,
-                // spins big for ~6 frames, then shrinks back and snaps flat
-                float pop = k < 0.15f ? k / 0.15f : (k > 0.82f ? (1 - k) / 0.18f : 1);
-                pop = pop * pop * (3 - 2 * pop);
-                float sc = 1 + 0.9f * pop + 0.05f * (float) Math.sin(k * Math.PI * 3);
-                Art.cube(c, d.centerX() - 16 * pop, d.centerY() - 6 * pop, 74 * sc, rx, ry, rz);
+                // upright sideways spin with a slight forward lean and tilt, as in the reference
+                float rx = rest[0] + (1 - e) * spinX + 24 * (1 - e), ry = rest[1] + (1 - e) * spinY,
+                        rz = (1 - e) * spinZ + 14 * (float) Math.sin(k * Math.PI);
+                // size per frame measured from the reference at 30 fps (10 frames): 1.0, 1.25, 1.3, then ~1.7
+                // for six frames, 1.25, then it snaps flat. It stays near the box, a little up and left.
+                float[] sizes = {1.0f, 1.25f, 1.32f, 1.68f, 1.72f, 1.7f, 1.72f, 1.7f, 1.68f, 1.25f};
+                float fk = k * (sizes.length - 1);
+                int fi = Math.min(sizes.length - 2, (int) fk);
+                float sc = sizes[fi] + (sizes[fi + 1] - sizes[fi]) * (fk - fi);
+                float pop = (sc - 1) / 0.7f;
+                Art.cube(c, d.centerX() - 10 * pop, d.centerY() - 12 * pop, 90 * sc, rx, ry, rz);
             } else if (state == S_ROLL) {
                 float s = 92 + (float) Math.sin(now / 150.0) * 5;
                 Art.dice(c, d.centerX(), d.centerY(), s, dice, 0, 0xFFDADADA);

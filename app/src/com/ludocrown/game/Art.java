@@ -485,6 +485,20 @@ final class Art {
         if (ghost) circle(c, cx, headY, headR, 0x66000000);
     }
 
+    /** Spinning dashed ring (alternating white and dark segments) marking a token that can move. */
+    static void dashedRing(Canvas c, float cx, float cy, float r, float w, float angle) {
+        reset();
+        P.setStyle(Paint.Style.STROKE);
+        P.setStrokeWidth(w);
+        R.set(cx - r, cy - r, cx + r, cy + r);
+        int n = 12;
+        float seg = 360f / n;
+        for (int i = 0; i < n; i++) {
+            P.setColor(i % 2 == 0 ? 0xFFFFFFFF : 0xFF2A2A2E);
+            c.drawArc(R, angle + i * seg, seg, false, P);
+        }
+    }
+
     /** Flat round checker token (alternate token style). */
     static void disc(Canvas c, float cx, float cy, float size, int color) {
         float r = size * 0.36f;
@@ -732,15 +746,19 @@ final class Art {
                 dst[k * 2 + 1] = cy + r[1] * h * persp;
             }
             quads[f] = dst;
+            // inset towards the face centre, then stroke with a fat round join: a rounded-cube silhouette
+            float mx = (dst[0] + dst[2] + dst[4] + dst[6]) / 4, my = (dst[1] + dst[3] + dst[5] + dst[7]) / 4;
             Path body = new Path();
-            body.moveTo(dst[0], dst[1]);
-            for (int k = 1; k < 4; k++) body.lineTo(dst[k * 2], dst[k * 2 + 1]);
+            for (int k = 0; k < 4; k++) {
+                float bx = dst[k * 2] + (mx - dst[k * 2]) * 0.1f, by = dst[k * 2 + 1] + (my - dst[k * 2 + 1]) * 0.1f;
+                if (k == 0) body.moveTo(bx, by); else body.lineTo(bx, by);
+            }
             body.close();
             reset();
-            P.setColor(0xFF9A9EA6);
+            P.setColor(0xFFA4A8B0);
             c.drawPath(body, P);
             P.setStyle(Paint.Style.STROKE);
-            P.setStrokeWidth(size * 0.02f);
+            P.setStrokeWidth(size * 0.13f);
             P.setStrokeJoin(Paint.Join.ROUND);
             c.drawPath(body, P);
         }
@@ -752,12 +770,13 @@ final class Art {
             CUBE_M.setPolyToPoly(src, 0, quads[f], 0, 4);
             c.save();
             c.concat(CUBE_M);
-            float light = 0.62f + 0.38f * n[2] - 0.12f * n[1];
+            // greyer, softer shading than a flat white face (as in the reference render)
+            float light = 0.55f + 0.36f * n[2] - 0.1f * n[1];
             int g = Math.max(0, Math.min(255, (int) (255 * light)));
             int face = 0xFF000000 | (g << 16) | (g << 8) | g;
             reset();
-            P.setShader(new RadialGradient(42, 40, 72, new int[]{lerp(face, 0xFFFFFFFF, 0.5f), face,
-                    lerp(face, 0xFF000000, 0.22f)}, new float[]{0, 0.55f, 1}, Shader.TileMode.CLAMP));
+            P.setShader(new RadialGradient(40, 38, 74, new int[]{lerp(face, 0xFFFFFFFF, 0.55f), face,
+                    lerp(face, 0xFF000000, 0.32f)}, new float[]{0, 0.5f, 1}, Shader.TileMode.CLAMP));
             R.set(4, 4, 96, 96);
             c.drawRoundRect(R, 26, 26, P);
             P.setShader(null);
